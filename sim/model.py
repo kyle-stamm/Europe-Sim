@@ -2,6 +2,10 @@ import mesa
 import random
 import math
 
+from mesa import DataCollector
+import pandas as pd
+from mesa_geo.geoagent import AgentCreator
+
 
 class Cell(mesa.Agent):
 
@@ -17,6 +21,7 @@ class Cell(mesa.Agent):
         self.y = ycor
         self.id = unique_id
         self.color = "grey"
+        # self.agent_creator = AgentCreator(Cell, self.model, )
 
     def distance_to_center(self):
         if self.empire.size > 1:
@@ -93,7 +98,7 @@ class Cell(mesa.Agent):
 
 class Empire:
 
-    colors = ['IndianRed', 'GreenYellow', 'Cornsilk', 'Sienna', 'Maroon',
+    colors = ['IndianRed', 'GreenYellow', 'Sienna', 'Maroon',
               'DeepPink', 'DarkGreen', 'MediumAquamarine', 'Orange', 'Gold',
               "Red", "Cyan", "Blue", "DarkBlue", "LightBlue", "Purple",
               "Yellow", "Lime", "Magenta", "Pink", "Brown", "Olive",
@@ -149,15 +154,18 @@ class EuropeModel(mesa.Model):
     asa_growth = 0.2
     asa_decay = 0.1
 
-    def __init__(self, num_agents, width, height, power_decline=1.4):
+    def __init__(self, width=90, height=60, power_decline=2):
         super().__init__()
 
         self.power_decline = power_decline
-        self.num_agents = num_agents
+        self.num_agents = width * height
         self.schedule = mesa.time.RandomActivation(self)
         self.grid = mesa.space.HexSingleGrid(width, height, False)
         self.empires = []
         self.default_empire = Empire(0, self)
+        self.avg_empire_area = 0
+        self.area_histogram = []
+        self.avg_area_data = DataCollector(model_reporters={"avg empire area": lambda model: model.avg_empire_area})
 
         for x in range(self.num_agents):
 
@@ -186,6 +194,26 @@ class EuropeModel(mesa.Model):
                     self.default_empire.remove_cell(neighbor)
                 self.empires[0].update()
 
+    def setup_gis(self):
+        self.geo_data.add_layer("gis_data/europe_simple.geojson")
+
+    def update_avg_area(self):
+        total = 0
+        for empire in self.empires:
+            if empire.size > 5:
+                total += empire.size
+
+        self.avg_empire_area = total / len(self.empires)
+
+    def update_area_histogram(self):
+        self.area_histogram.clear()
+        for empire in self.empires:
+            if empire.size > 5:
+                self.area_histogram.append(empire.size)
+
+    def get_avg_area(self):
+        return self.avg_empire_area
+
     def step(self):
         for empire in self.empires:
             empire.update_size()
@@ -195,6 +223,10 @@ class EuropeModel(mesa.Model):
 
             empire.update_center()
             empire.update_avg_asabiya()
+        self.update_avg_area()
+        self.update_area_histogram()
         self.schedule.step()
+        self.avg_area_data.collect(self)
+
 
 
