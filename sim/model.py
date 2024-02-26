@@ -1,103 +1,185 @@
 import mesa
+import mesa_geo as mg
 import random
 import math
-
+import shapely
 from mesa import DataCollector
 import pandas as pd
-from mesa_geo.geoagent import AgentCreator
 
+# cell class
+# cells are geo agents created from a geojson file
+class Cell(mg.GeoAgent):
 
-class Cell(mesa.Agent):
+    # geometry is a shapely object
+    # crs will always be epsg:4326 for geojson
+    def __init__(self, unique_id, model, geometry, crs):
+        super().__init__(unique_id, model, geometry, crs)
 
-    def __init__(self, unique_id, xcor, ycor, model):
-        super().__init__(unique_id, model)
+        self.geometry = geometry
 
+        # extracts x and y coordinates from the shapely object
+        self.x = shapely.get_x(geometry)
+        self.y = shapely.get_y(geometry)
+
+        # stores the model that the cells will be loaded into
         self.model = model
+
+        # initializes cells as part of no empire (independent chiefdoms, stored as "default empire")
         self.empire = self.model.default_empire
+
+        # initial asabiya
         self.asabiya = 0.001
         self.power = self.asabiya
-        self.elevation = 0
-        self.x = xcor
-        self.y = ycor
-        self.id = unique_id
-        self.color = "grey"
-        # self.agent_creator = AgentCreator(Cell, self.model, )
 
+        # TO DO:
+        # add elevation modifier
+        self.elevation = 0
+
+        self.id = unique_id
+
+        # initial color for chiefdoms
+        self.color = "grey"
+
+        # stores the neighbors of the cell when set up
+        self.neighbors = []
+
+    # calculates distance from this cell to the center of the cell's empire
     def distance_to_center(self):
+
+        # checks if the cell is an independent chiefdom or not
         if self.empire.size > 1:
+
+            # if it is not, uses the distance formula between the empire's center and this cell's location
             return math.sqrt((self.empire.center[0] - self.x) ** 2 + (self.empire.center[1] - self.y) ** 2)
         else:
+
+            # if it is, returns 0 as there is only one cell in a chiefdom
             return 0
 
+    # updates the asabiya of the cell
     def update_asabiya(self, neighbors):
+
+        # checks if the cell is a border cell
+        # iterates through each neighbor of the cell
         for neighbor in neighbors:
+
+            # if at least one neighbor is found that is an enemy cell
+            # flags this cell as a border cell
             if neighbor.empire.id != self.empire.id:
                 border_cell = True
                 break
+
+        # otherwise, flags this cell as a non-border cell
         else:
             border_cell = False
 
+        # grows or shrinks asabiya according to whether the cell is a border cell
         if border_cell:
             self.asabiya += EuropeModel.asa_growth * self.asabiya * (1 - self.asabiya)
         else:
             self.asabiya -= EuropeModel.asa_decay * self.asabiya
 
+    # allows the cell to attack one of its neighbors
     def attack(self, neighbors):
+
+        # randomly chooses a neighbor to attack
         attack_choice = random.choice(neighbors)
 
-        if attack_choice.empire.id == self.empire.id:
-            for neighbor in neighbors:
-                if neighbor.empire.id != self.empire.id:
-                    attack_choice = neighbor
-                    break
-            else:
-                return
-
+        # determines whether the difference power between the cells is greater than the delta_power value
         if self.power - attack_choice.power > EuropeModel.delta_power:
+
+            # if it is, adds the attacked cell to the attacker's empire
+
+            # removes the attacked cell from its previous empire
             attack_choice.empire.remove_cell(attack_choice)
+
+            # sets the attacked cell's empire to same as the attacker
             attack_choice.empire = self.empire
+
+            # adds the attacked cell to the attacking cell's empire
             self.empire.add_cell(attack_choice)
+
+            # sets the attacked cell's asabiya to be the average of the two cells
             attack_choice.asabiya = (self.asabiya + attack_choice.asabiya) / 2.0
 
+    # sets up the neighbors for each cell
+    def setup_neighbors(self):
+
+        # gets the touching neighbors for each cell
+        neighbors = self.model.space.get_neighbors(self)
+
+        # checks to make sure that the cells are actually close together on the map
+        # cells that are separated by bodies of water are still technically touching,
+        # as there are no cells within the body of water
+        for neighbor in neighbors:
+            if self.model.space.distance(self, neighbor) < 1:
+                self.neighbors.append(neighbor)
+
+    # cell actions each step
     def step(self):
 
+        # checks if the cell is an independent chiefdom or part of an empire
         if self.empire.id != 0:
 
+            # if part of an empire
+
+            # sets power according to the Turchin equation
+            # power = empire size * average empire asabiya * e^(-1 * distance to empire's center / power decline)
             self.power = self.empire.size * self.empire.average_asabiya * math.exp(-1 * self.distance_to_center() / self.model.power_decline)
+
+            # recolors the empire
             self.color = self.empire.color
 
-            neighbors = self.model.grid.get_neighbors((self.x, self.y), include_center=False, radius=1)
-            self.update_asabiya(neighbors)
-            self.attack(neighbors)
+            # updates the cell's asabiya
+            self.update_asabiya(self.neighbors)
+
+            # attacks if the cell has any neighbors that are enemy cells
+            if len([neighbor for neighbor in self.neighbors if neighbor.empire.id != self.empire.id]) > 0:
+                self.attack([neighbor for neighbor in self.neighbors if neighbor.empire.id != self.empire.id])
 
         else:
-            neighbors = self.model.grid.get_neighbors((self.x, self.y), include_center=False, radius=1)
 
+            # if it is an independent chiefdom
+
+            # it is always a border cell, so asabiya always grows
             self.asabiya += EuropeModel.asa_growth * self.asabiya * (1 - self.asabiya)
+
+            # power is just the asabiya value
             self.power = self.asabiya
 
-            if len([neighbor for neighbor in neighbors if neighbor.empire.id != 0]) > 0:
-                attack_choice = random.choice([neighbor for neighbor in neighbors if neighbor.empire.id != 0])
+            # checks if the cell has neighbors to attack that are part of an empire
+            if len([neighbor for neighbor in self.neighbors if neighbor.empire.id != 0]) > 0:
+                attack_choice = random.choice([neighbor for neighbor in self.neighbors if neighbor.empire.id != 0])
             else:
                 return
 
+            # attacks a neighboring cell with an empire
             if self.power - attack_choice.power > EuropeModel.delta_power:
+
+                # if this cell wins, creates a new empire with this cell and the attacked cell
                 self.model.empires.append(Empire(len(self.model.empires) + 1, self.model))
 
+                # adds both cells to the new empire
                 self.model.empires[len(self.model.empires) - 1].add_cell(self)
                 self.model.empires[len(self.model.empires) - 1].add_cell(attack_choice)
 
                 self.empire = self.model.empires[len(self.model.empires) - 1]
 
+                # removes the attacked cell from its previous empire
                 attack_choice.empire.remove_cell(attack_choice)
                 attack_choice.empire = self.empire
                 attack_choice.asabiya = (self.asabiya + attack_choice.asabiya) / 2.0
 
+                # updates the new empire
                 self.empire.update()
 
 
+# empire class
+# mainly holds cells
 class Empire:
 
+    # HTML colors
+    # will add more when I'm not being lazy
     colors = ['IndianRed', 'GreenYellow', 'Sienna', 'Maroon',
               'DeepPink', 'DarkGreen', 'MediumAquamarine', 'Orange', 'Gold',
               "Red", "Cyan", "Blue", "DarkBlue", "LightBlue", "Purple",
@@ -111,110 +193,188 @@ class Empire:
         self.size = 0
         self.center = (None, None)
         self.id = unique_id
+
+        # picks a random color from the color list
         self.color = Empire.colors[random.randint(0, len(Empire.colors) - 1)]
         self.average_asabiya = 0
 
+    # adds a cell to this empire
     def add_cell(self, cell):
         self.cells.append(cell)
         cell.empire = self
 
+    # removes a cell from this empire
     def remove_cell(self, cell):
         if cell in self.cells:
             self.cells.remove(cell)
 
+    # updates size according to the number of cells held
     def update_size(self):
         self.size = len(self.cells)
 
+    # updates the average asabiya
     def update_avg_asabiya(self):
 
+        # sums the asabiyas of all cells in the empire
         total = 0
         for cell in self.cells:
             total += cell.asabiya
+
+        # divides by the number of cells in the empire
         self.average_asabiya = total / len(self.cells)
 
+    # updates the center point of the empire
     def update_center(self):
 
+        # sums the x and y coordinates of all cells in the empire
         x_total = 0
         y_total = 0
         for cell in self.cells:
             x_total += cell.x
             y_total += cell.y
 
+        # divides those totals by the number of cells
         self.center = round(x_total / len(self.cells)), round(y_total / len(self.cells))
 
+    # compiled update function
     def update(self):
         self.update_avg_asabiya()
         self.update_center()
-        self.update_center()
 
 
+# model class
 class EuropeModel(mesa.Model):
 
+    # global constants
     delta_power = 0.1
     asa_growth = 0.2
     asa_decay = 0.1
 
-    def __init__(self, width=90, height=60, power_decline=2):
+    def __init__(self, power_decline=1.4):
         super().__init__()
 
+        # power decline is determined by the UI slider
         self.power_decline = power_decline
-        self.num_agents = width * height
+
+        # sets schedule to be random activation so as not to favor one empire
         self.schedule = mesa.time.RandomActivation(self)
-        self.grid = mesa.space.HexSingleGrid(width, height, False)
+
+        # list of empires currently in the model
         self.empires = []
+
+        # default empire that all cells start as a part of
         self.default_empire = Empire(0, self)
         self.avg_empire_area = 0
+
+        # area histogram
+        # each element is a frequency bar
         self.area_histogram = []
-        self.avg_area_data = DataCollector(model_reporters={"avg empire area": lambda model: model.avg_empire_area})
+        self.histogram_max_bars = 12
 
-        for x in range(self.num_agents):
+        # data collector
+        # format is {<datapoint name>: lambda model: <reporting function or variable>}
+        self.datacollector = DataCollector(model_reporters={"average empire area": lambda model: model.avg_empire_area,
+                                                            "number of empires with more than 5 hexes": lambda model: len([empire for empire in model.empires if empire.size > 5]),
+                                                            "5-50 Hexes": lambda model: model.area_histogram[0],
+                                                            "51-100 Hexes": lambda model: model.area_histogram[1],
+                                                            "101-150 Hexes": lambda model: model.area_histogram[2],
+                                                            "151-200 Hexes": lambda model: model.area_histogram[3],
+                                                            "201-250 Hexes": lambda model: model.area_histogram[4],
+                                                            "251-300 Hexes": lambda model: model.area_histogram[5],
+                                                            "301-350 Hexes": lambda model: model.area_histogram[6],
+                                                            "351-400 Hexes": lambda model: model.area_histogram[7],
+                                                            "401-450 Hexes": lambda model: model.area_histogram[8],
+                                                            "451-500 Hexes": lambda model: model.area_histogram[9],
+                                                            "501-550 Hexes": lambda model: model.area_histogram[10],
+                                                            "551-600 Hexes": lambda model: model.area_histogram[11],
+                                                            "601 or more Hexes": lambda model: model.area_histogram[12]})
 
-            cell_x = self.random.randrange(self.grid.width)
-            cell_y = self.random.randrange(self.grid.height)
-            while not self.grid.is_cell_empty((cell_x, cell_y)):
-                cell_x = self.random.randrange(self.grid.width)
-                cell_y = self.random.randrange(self.grid.height)
+        # sets up the geo space grid
+        self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)
 
-            cell = Cell(x, cell_x, cell_y, self)
-            self.schedule.add(cell)
-            self.grid.place_agent(cell, (cell_x, cell_y))
+        # agent generator
+        ac = mg.AgentCreator(Cell, model=self)
+
+        # creates cells from the GeoJSON data file
+        self.cells = ac.from_file("gis_data/europe_hex_points.geojson")
+
+        # adds those agents to the geo space
+        self.space.add_agents(self.cells)
+
+        # adds all new cells to the default empire
+        # also adds them to the scheduler
+        for cell in self.cells:
             self.default_empire.add_cell(cell)
+            self.schedule.add(cell)
 
-        starting_x = random.randint(0, self.grid.width)
-        starting_y = random.randint(0, self.grid.height)
-        for cell in self.grid.coord_iter():
-            if cell[1][0] == starting_x and cell[1][1] == starting_y:
-                self.empires.append(Empire(len(self.empires) + 1, self))
-                self.empires[0].add_cell(cell[0])
-                self.default_empire.remove_cell(cell[0])
+        # sets up the neighbors for each cell
+        # pretty sure this CANNOT be moved to the above for loop
+        for cell in self.cells:
+            cell.setup_neighbors()
 
-                initial_neighbors = self.grid.get_neighbors((starting_x, starting_y), include_center=False, radius=1)
-                for neighbor in initial_neighbors:
-                    self.empires[0].add_cell(neighbor)
-                    self.default_empire.remove_cell(neighbor)
-                self.empires[0].update()
+        # sets up the initial empire
 
-    def setup_gis(self):
-        self.geo_data.add_layer("gis_data/europe_simple.geojson")
+        # picks a random cell
+        starting_cells = [self.cells[random.randint(0, len(self.cells) - 1)]]
 
+        # initializes its neighbors as part of the starting empire as well
+        # checks to make sure its neighbors are actually close to it
+        for neighbor in self.space.get_neighbors(starting_cells[0]):
+            if self.space.distance(starting_cells[0], neighbor) < 1:
+                starting_cells.append(neighbor)
+
+        # adds the first empire to the empire list
+        self.empires.append(Empire(len(self.empires) + 1, self))
+
+        # adds each starting cell to that empire
+        for cell in starting_cells:
+            self.empires[0].add_cell(cell)
+            self.default_empire.remove_cell(cell)
+
+    # updates the average area of all empires
     def update_avg_area(self):
+
+        # counts the number of empires with size greater than 5
+        # if this is not done, distribution is skewed as small empires pop up on the border of big ones constantly
+        count = 0
+
+        # sum of the areas of all empires
         total = 0
         for empire in self.empires:
+            count += 1
             if empire.size > 5:
                 total += empire.size
 
-        self.avg_empire_area = total / len(self.empires)
+        # averages the area of the empires
+        if count > 0:
+            self.avg_empire_area = total / count
 
+    # updates the area histogram
     def update_area_histogram(self):
-        self.area_histogram.clear()
+
+        # resets the histogram on each step
+        # initially has 13 values of 0
+        self.area_histogram = [0 for x in range(self.histogram_max_bars + 2)]
+
+        # iterates through every empire
         for empire in self.empires:
+
+            # only adds it to the histogram if its size is greater than 5 hexes
             if empire.size > 5:
-                self.area_histogram.append(empire.size)
 
-    def get_avg_area(self):
-        return self.avg_empire_area
+                # if the size is greater than 600 hexes, it is put in the catch-all category
+                if empire.size > 600:
+                    self.area_histogram[12] += 1
 
+                # otherwise, increments the corresponding frequency bar
+                else:
+                    self.area_histogram[empire.size // 50] += 1
+
+    # model actions on each step
     def step(self):
+
+        # updates empires
+        # removes them from the empire list if their size is 0
         for empire in self.empires:
             empire.update_size()
             if empire.size == 0:
@@ -223,10 +383,16 @@ class EuropeModel(mesa.Model):
 
             empire.update_center()
             empire.update_avg_asabiya()
+
+        # updates data variables
         self.update_avg_area()
         self.update_area_histogram()
+
+        # steps all cells in a random order
         self.schedule.step()
-        self.avg_area_data.collect(self)
+
+        # collects data on each step
+        self.datacollector.collect(self)
 
 
 
