@@ -3,7 +3,7 @@
 import mesa.visualization
 import mesa_geo.visualization
 from mesa.visualization.ModularVisualization import ModularServer
-from model import EuropeModel
+from model import EuropeModel, EmpireCell
 import xyzservices.providers as xyz
 from mesa.visualization.modules import BarChartModule
 from mesa.visualization.modules import ChartModule
@@ -14,11 +14,20 @@ from mesa.visualization.UserParam import Slider
 # defines how agents are portrayed on the map
 def agent_portrayal(agent):
 
-    # dictionary of portrayal parameters
-    portrayal = {"shape": "circle",
-                 "color": agent.color,
-                 "radius": 0.001
-                 }
+    if isinstance(agent, EmpireCell):
+        # if agent.elevation == -32768:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Black",
+        #                  "radius": 0.001
+        #                  }
+        # else:
+        # dictionary of portrayal parameters
+        portrayal = {"shape": "circle",
+                     "color": agent.color,
+                     "radius": 0.001
+                     }
+    else:
+        portrayal = (0, 0, 0, 0)
 
     return portrayal
 

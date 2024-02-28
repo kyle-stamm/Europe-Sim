@@ -1,14 +1,21 @@
+import uuid
+
 import mesa
 import mesa_geo as mg
 import random
 import math
+
+import numpy as np
 import shapely
 from mesa import DataCollector
 import pandas as pd
+import geopandas as gpd
+from mesa_geo.raster_layers import Cell, RasterLayer
+
 
 # cell class
 # cells are geo agents created from a geojson file
-class Cell(mg.GeoAgent):
+class EmpireCell(mg.GeoAgent):
 
     # geometry is a shapely object
     # crs will always be epsg:4326 for geojson
@@ -115,6 +122,10 @@ class Cell(mg.GeoAgent):
             if self.model.space.distance(self, neighbor) < 1:
                 self.neighbors.append(neighbor)
 
+    def setup_elevation(self):
+        self.elevation = self.model.space.layers[0].__getitem__((round(self.x), round(self.y))).elevation
+        print(f"I have an elevation of {self.elevation} at ({self.x}, {self.y})")
+
     # cell actions each step
     def step(self):
 
@@ -210,7 +221,19 @@ class Empire:
 
     # updates size according to the number of cells held
     def update_size(self):
+
+        if self.size > 5:
+            if self.size > 600:
+                self.model.area_histogram[12] -= 1
+            else:
+                self.model.area_histogram[self.size // 50] -= 1
+
         self.size = len(self.cells)
+        if self.size > 5:
+            if self.size > 600:
+                self.model.area_histogram[12] += 1
+            else:
+                self.model.area_histogram[self.size // 50] += 1
 
     # updates the average asabiya
     def update_avg_asabiya(self):
@@ -242,6 +265,15 @@ class Empire:
         self.update_center()
 
 
+class ElevationCell(Cell):
+    def __init__(self, pos: mesa.space.Coordinate | None = None, indices: mesa.space.Coordinate | None = None,):
+        super().__init__(pos, indices)
+        self.elevation = None
+
+    def step(self):
+        pass
+
+
 # model class
 class EuropeModel(mesa.Model):
 
@@ -268,8 +300,7 @@ class EuropeModel(mesa.Model):
 
         # area histogram
         # each element is a frequency bar
-        self.area_histogram = []
-        self.histogram_max_bars = 12
+        self.area_histogram = [0 for x in range(13)]
 
         # data collector
         # format is {<datapoint name>: lambda model: <reporting function or variable>}
@@ -290,16 +321,26 @@ class EuropeModel(mesa.Model):
                                                             "601 or more Hexes": lambda model: model.area_histogram[12]})
 
         # sets up the geo space grid
+        # self.space = EuropeWithElevation(crs="epsg:4326")
+        # self.space.load_data()
+
         self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)
 
         # agent generator
-        ac = mg.AgentCreator(Cell, model=self)
+        ac = mg.AgentCreator(EmpireCell, model=self)
 
         # creates cells from the GeoJSON data file
         self.cells = ac.from_file("gis_data/europe_hex_points.geojson")
 
         # adds those agents to the geo space
         self.space.add_agents(self.cells)
+
+        # TO DO:
+        # fix this mess
+        # elevation_layer = RasterLayer.from_file("gis_data/elevation.asc", cell_cls=ElevationCell, attr_name="elevation")
+        # elevation_layer.crs = self.space.crs
+        # elevation_layer.total_bounds = self.space.total_bounds
+        # self.space.add_layer(elevation_layer)
 
         # adds all new cells to the default empire
         # also adds them to the scheduler
@@ -311,6 +352,9 @@ class EuropeModel(mesa.Model):
         # pretty sure this CANNOT be moved to the above for loop
         for cell in self.cells:
             cell.setup_neighbors()
+
+            # TO DO:
+            # cell.setup_elevation()
 
         # sets up the initial empire
 
@@ -341,43 +385,22 @@ class EuropeModel(mesa.Model):
         # sum of the areas of all empires
         total = 0
         for empire in self.empires:
-            count += 1
             if empire.size > 5:
+                count += 1
                 total += empire.size
 
         # averages the area of the empires
         if count > 0:
             self.avg_empire_area = total / count
 
-    # updates the area histogram
-    def update_area_histogram(self):
-
-        # resets the histogram on each step
-        # initially has 13 values of 0
-        self.area_histogram = [0 for x in range(self.histogram_max_bars + 2)]
-
-        # iterates through every empire
-        for empire in self.empires:
-
-            # only adds it to the histogram if its size is greater than 5 hexes
-            if empire.size > 5:
-
-                # if the size is greater than 600 hexes, it is put in the catch-all category
-                if empire.size > 600:
-                    self.area_histogram[12] += 1
-
-                # otherwise, increments the corresponding frequency bar
-                else:
-                    self.area_histogram[empire.size // 50] += 1
-
     # model actions on each step
     def step(self):
 
         # updates empires
-        # removes them from the empire list if their size is 0
+        # removes them from the empire list if their size is 0 or less
         for empire in self.empires:
             empire.update_size()
-            if empire.size == 0:
+            if empire.size <= 0:
                 self.empires.remove(empire)
                 continue
 
@@ -386,13 +409,9 @@ class EuropeModel(mesa.Model):
 
         # updates data variables
         self.update_avg_area()
-        self.update_area_histogram()
 
         # steps all cells in a random order
         self.schedule.step()
 
         # collects data on each step
         self.datacollector.collect(self)
-
-
-
