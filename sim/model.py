@@ -1,15 +1,10 @@
-import uuid
 
 import mesa
 import mesa_geo as mg
 import random
 import math
-
-import numpy as np
 import shapely
 from mesa import DataCollector
-import pandas as pd
-import geopandas as gpd
 from mesa_geo.raster_layers import Cell, RasterLayer
 
 
@@ -28,6 +23,16 @@ class EmpireCell(mg.GeoAgent):
         self.x = shapely.get_x(geometry)
         self.y = shapely.get_y(geometry)
 
+        # uses the longitudinal and latitudinal ratio of the cell's position to determine its index in the raster layer
+        # has to rounded, so it's not exact, sue me
+        self.x_index = round(((180 + self.x) / 360) * self.model.space.layers[0].width)
+        self.y_index = round(((90 + self.y) / 180) * self.model.space.layers[0].height)
+
+        # assigns the cell from the raster layer using those indexes
+        self.elevation = self.model.space.layers[0][(self.x_index, self.y_index)].elevation
+        if self.elevation == -32768:
+            self.elevation = 1
+
         # stores the model that the cells will be loaded into
         self.model = model
 
@@ -37,10 +42,6 @@ class EmpireCell(mg.GeoAgent):
         # initial asabiya
         self.asabiya = 0.001
         self.power = self.asabiya
-
-        # TO DO:
-        # add elevation modifier
-        self.elevation = 0
 
         self.id = unique_id
 
@@ -121,10 +122,6 @@ class EmpireCell(mg.GeoAgent):
         for neighbor in neighbors:
             if self.model.space.distance(self, neighbor) < 1:
                 self.neighbors.append(neighbor)
-
-    def setup_elevation(self):
-        self.elevation = self.model.space.layers[0].__getitem__((round(self.x), round(self.y))).elevation
-        print(f"I have an elevation of {self.elevation} at ({self.x}, {self.y})")
 
     # cell actions each step
     def step(self):
@@ -220,6 +217,7 @@ class Empire:
             self.cells.remove(cell)
 
     # updates size according to the number of cells held
+    # also updates the area histogram accordingly
     def update_size(self):
 
         if self.size > 5:
@@ -265,6 +263,8 @@ class Empire:
         self.update_center()
 
 
+# cell to store raster elevation data
+# doesn't ever need to change!
 class ElevationCell(Cell):
     def __init__(self, pos: mesa.space.Coordinate | None = None, indices: mesa.space.Coordinate | None = None,):
         super().__init__(pos, indices)
@@ -288,6 +288,9 @@ class EuropeModel(mesa.Model):
         # power decline is determined by the UI slider
         self.power_decline = power_decline
 
+        # counts steps since the model began running
+        self.steps = 0
+
         # sets schedule to be random activation so as not to favor one empire
         self.schedule = mesa.time.RandomActivation(self)
 
@@ -303,7 +306,7 @@ class EuropeModel(mesa.Model):
         self.area_histogram = [0 for x in range(13)]
 
         # data collector
-        # format is {<datapoint name>: lambda model: <reporting function or variable>}
+        # format is {<datapoint name>: lambda model: model.<reporting function or variable>}
         self.datacollector = DataCollector(model_reporters={"average empire area": lambda model: model.avg_empire_area,
                                                             "number of empires with more than 5 hexes": lambda model: len([empire for empire in model.empires if empire.size > 5]),
                                                             "5-50 Hexes": lambda model: model.area_histogram[0],
@@ -320,11 +323,17 @@ class EuropeModel(mesa.Model):
                                                             "551-600 Hexes": lambda model: model.area_histogram[11],
                                                             "601 or more Hexes": lambda model: model.area_histogram[12]})
 
-        # sets up the geo space grid
-        # self.space = EuropeWithElevation(crs="epsg:4326")
-        # self.space.load_data()
-
+        # creates the geo space with the GeoJSON coordinate system
         self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)
+
+        # adds the elevation raster layer
+        # order of precision (ascending):
+        # 1. "gis_data/elevation_10.tif"
+        # 2. "gis_data/elevation_5.tif"
+        # 3. "gis_data/elevation_2-5.tif"
+        elevation_layer = RasterLayer.from_file("gis_data/elevation_10.tif", cell_cls=ElevationCell, attr_name="elevation")
+        elevation_layer.crs = self.space.crs
+        self.space.add_layer(elevation_layer)
 
         # agent generator
         ac = mg.AgentCreator(EmpireCell, model=self)
@@ -335,26 +344,15 @@ class EuropeModel(mesa.Model):
         # adds those agents to the geo space
         self.space.add_agents(self.cells)
 
-        # TO DO:
-        # fix this mess
-        # elevation_layer = RasterLayer.from_file("gis_data/elevation.asc", cell_cls=ElevationCell, attr_name="elevation")
-        # elevation_layer.crs = self.space.crs
-        # elevation_layer.total_bounds = self.space.total_bounds
-        # self.space.add_layer(elevation_layer)
-
         # adds all new cells to the default empire
         # also adds them to the scheduler
         for cell in self.cells:
             self.default_empire.add_cell(cell)
             self.schedule.add(cell)
-
-        # sets up the neighbors for each cell
-        # pretty sure this CANNOT be moved to the above for loop
-        for cell in self.cells:
             cell.setup_neighbors()
 
-            # TO DO:
-            # cell.setup_elevation()
+        # removes the elevation layer after cell creation to improve performance
+        self.space.layers.pop()
 
         # sets up the initial empire
 
@@ -378,7 +376,7 @@ class EuropeModel(mesa.Model):
     # updates the average area of all empires
     def update_avg_area(self):
 
-        # counts the number of empires with size greater than 5
+        # counts only the number of empires with size greater than 5
         # if this is not done, distribution is skewed as small empires pop up on the border of big ones constantly
         count = 0
 
@@ -410,8 +408,11 @@ class EuropeModel(mesa.Model):
         # updates data variables
         self.update_avg_area()
 
+        # collects data on each step
+        self.datacollector.collect(self)
+
         # steps all cells in a random order
         self.schedule.step()
 
-        # collects data on each step
-        self.datacollector.collect(self)
+        # tracks running time
+        self.steps += 1
