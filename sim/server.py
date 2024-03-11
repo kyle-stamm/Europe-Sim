@@ -5,13 +5,15 @@ import xyzservices.providers as xyz
 from mesa.visualization.ModularVisualization import ModularServer
 from model import EuropeModel, EmpireCell
 from mesa.visualization.modules import BarChartModule, ChartModule, TextElement
-from mesa.visualization.UserParam import Slider
+from mesa.visualization.UserParam import Slider, Checkbox, NumberInput
 
 
 # defines how agents are portrayed on the map
 def agent_portrayal(agent):
 
     if isinstance(agent, EmpireCell):
+
+        # see cell elevation
         # if agent.elevation > 1500:
         #     portrayal = {"shape": "circle",
         #                  "color": "Red",
@@ -19,25 +21,65 @@ def agent_portrayal(agent):
         #                  }
         # elif agent.elevation > 1000:
         #     portrayal = {"shape": "circle",
-        #                  "color": "Yellow",
+        #                  "color": "Orange",
         #                  "radius": 0.001
         #                  }
         # elif agent.elevation > 500:
         #     portrayal = {"shape": "circle",
-        #                  "color": "Green",
+        #                  "color": "Yellow",
         #                  "radius": 0.001
         #                  }
         # else:
         #     portrayal = {"shape": "circle",
-        #                  "color": "LightBlue",
+        #                  "color": "Green",
         #                  "radius": 0.001
         #                  }
 
-        # dictionary of portrayal parameters
-        portrayal = {"shape": "circle",
-                     "color": agent.color,
-                     "radius": 0.001
-                     }
+
+        # see coastal cells
+        # if agent.coastal:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Red",
+        #                  "radius": 0.001
+        #                  }
+        # else:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Green",
+        #                  "radius": 0.001
+        #                  }
+
+        if agent.running or not agent.show_heatmap:
+            # dictionary of portrayal parameters
+            portrayal = {"shape": "circle",
+                         "color": agent.color,
+                         "radius": 0.001
+                         }
+        else:
+            if agent.times_changed_hands == 0:
+                portrayal = {"shape": "circle",
+                             "color": "grey",
+                             "radius": 0.001
+                             }
+            elif agent.times_changed_hands > 75:
+                portrayal = {"shape": "circle",
+                             "color": "Red",
+                             "radius": 0.001
+                             }
+            elif agent.times_changed_hands > 50:
+                portrayal = {"shape": "circle",
+                             "color": "Yellow",
+                             "radius": 0.001
+                             }
+            elif agent.times_changed_hands > 25:
+                portrayal = {"shape": "circle",
+                             "color": "YellowGreen",
+                             "radius": 0.001
+                             }
+            else:
+                portrayal = {"shape": "circle",
+                             "color": "DarkGreen",
+                             "radius": 0.001
+                             }
     else:
         portrayal = (0, 0, 0, 0)
 
@@ -94,12 +136,22 @@ area_histogram = BarChartModule([{"Label": "5-50 Hexes", "Color": "IndianRed"},
 # creates the grid from the map module
 # can change dimensions of the canvas here if needed
 grid = mesa_geo.visualization.MapModule(agent_portrayal, [46, 17], 3.75, tiles=xyz.CartoDB.Positron, map_width=900, map_height=600)
-slider = Slider('Power Decline', value=1.4, min_value=0.1, max_value=4, step=0.1, description="rate at which empire power declines with distance")
+
+# slider for inputting power decline
+slider = Slider('Power Decline', value=4, min_value=0.1, max_value=8, step=0.1)
+
+# number input for setting length of the simulation
+sim_length = NumberInput("Length of Simulation (Steps)", value=200)
+
+# checkbox for whether to show the heatmap at the end
+show_heatmap = Checkbox("Show heatmap at end?", value=False)
 
 # dictionary of model parameters to be passed into the server
 # can modify with user settable parameters like sliders
 model_params = {
-    "power_decline": slider
+    "power_decline": slider,
+    "sim_length": sim_length,
+    "show_heatmap": show_heatmap
 }
 
 # creates and launches the server

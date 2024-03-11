@@ -6,6 +6,10 @@ import math
 import shapely
 from mesa import DataCollector
 from mesa_geo.raster_layers import Cell, RasterLayer
+import seaborn as sns
+import numpy
+import pandas
+from matplotlib import pyplot as plot
 
 
 # cell class
@@ -32,6 +36,19 @@ class EmpireCell(mg.GeoAgent):
         self.elevation = self.model.space.layers[0][(self.x_index, self.y_index)].elevation
         if self.elevation == -32768:
             self.elevation = 1
+
+        # old way of implementing the elevation modifier
+        # probably bad?
+        # if self.elevation > math.e:
+        #     self.elevation_modifier = math.log(self.elevation)
+        # else:
+        #     self.elevation_modifier = 1
+
+        self.coastal = False
+        self.running = True
+        self.show_heatmap = False
+
+        self.times_changed_hands = -1
 
         # stores the model that the cells will be loaded into
         self.model = model
@@ -93,8 +110,20 @@ class EmpireCell(mg.GeoAgent):
         # randomly chooses a neighbor to attack
         attack_choice = random.choice(neighbors)
 
+        # calculation of the attacked cell's elevation modifier
+        # easier to win if the attacked cell is at a lower elevation
+        # harder to win if the attacked cell is at a higher elevation
+        if (self.elevation - attack_choice.elevation) > 0:
+            elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
+        elif (self.elevation - attack_choice.elevation) < 0:
+            elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+            if elevation_modifier <= 0:
+                elevation_modifier = 0.01
+        else:
+            elevation_modifier = 1
+
         # determines whether the difference power between the cells is greater than the delta_power value
-        if self.power - attack_choice.power > EuropeModel.delta_power:
+        if self.power - (attack_choice.power * elevation_modifier) > EuropeModel.delta_power:
 
             # if it is, adds the attacked cell to the attacker's empire
 
@@ -122,6 +151,17 @@ class EmpireCell(mg.GeoAgent):
         for neighbor in neighbors:
             if self.model.space.distance(self, neighbor) < 1:
                 self.neighbors.append(neighbor)
+
+        if len(self.neighbors) < 6 and (self.x - 1) > -12 and (self.x + 1) < 48 and (self.y - 1) > 26 and (self.y + 1) < 62.75:
+            self.coastal = True
+
+    def fix_coastal(self):
+
+        for neighbor in self.neighbors:
+            if neighbor.coastal:
+                return
+        else:
+            self.coastal = False
 
     # cell actions each step
     def step(self):
@@ -161,8 +201,20 @@ class EmpireCell(mg.GeoAgent):
             else:
                 return
 
+            # calculation of the attacked cell's elevation modifier
+            # easier to win if the attacked cell is at a lower elevation
+            # harder to win if the attacked cell is at a higher elevation
+            if (self.elevation - attack_choice.elevation) > 0:
+                elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
+            elif (self.elevation - attack_choice.elevation) < 0:
+                elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+                if elevation_modifier <= 0:
+                    elevation_modifier = 0.01
+            else:
+                elevation_modifier = 1
+
             # attacks a neighboring cell with an empire
-            if self.power - attack_choice.power > EuropeModel.delta_power:
+            if self.power - (attack_choice.power * elevation_modifier) > EuropeModel.delta_power:
 
                 # if this cell wins, creates a new empire with this cell and the attacked cell
                 self.model.empires.append(Empire(len(self.model.empires) + 1, self.model))
@@ -192,7 +244,10 @@ class Empire:
               'DeepPink', 'DarkGreen', 'MediumAquamarine', 'Orange', 'Gold',
               "Red", "Cyan", "Blue", "DarkBlue", "LightBlue", "Purple",
               "Yellow", "Lime", "Magenta", "Pink", "Brown", "Olive",
-              "Aquamarine"]
+              "Aquamarine", "Aqua", "Bisque", "CadetBlue", "Coral",
+              "Crimson", "DarkCyan", "DarkGoldenRod", "DarkMagenta",
+              "DarkOrange", "DarkSeaGreen", "MediumPurple", "MidnightBlue",
+              "Orchid", "SandyBrown", "YellowGreen"]
 
     def __init__(self, unique_id, model):
 
@@ -210,6 +265,7 @@ class Empire:
     def add_cell(self, cell):
         self.cells.append(cell)
         cell.empire = self
+        cell.times_changed_hands += 1
 
     # removes a cell from this empire
     def remove_cell(self, cell):
@@ -282,14 +338,21 @@ class EuropeModel(mesa.Model):
     asa_growth = 0.2
     asa_decay = 0.1
 
-    def __init__(self, power_decline=1.4):
+    def __init__(self, power_decline=4, sim_length=200, show_heatmap=False):
         super().__init__()
 
         # power decline is determined by the UI slider
         self.power_decline = power_decline
+        self.sim_length = sim_length
 
         # counts steps since the model began running
         self.steps = 0
+
+        # tracks whether the simulation is running
+        self.running = True
+
+        # stores whether the simulation shows the heatmap at the end of its runtime
+        self.show_heatmap = show_heatmap
 
         # sets schedule to be random activation so as not to favor one empire
         self.schedule = mesa.time.RandomActivation(self)
@@ -307,7 +370,8 @@ class EuropeModel(mesa.Model):
 
         # data collector
         # format is {<datapoint name>: lambda model: model.<reporting function or variable>}
-        self.datacollector = DataCollector(model_reporters={"average empire area": lambda model: model.avg_empire_area,
+        self.datacollector = DataCollector(model_reporters={"steps": lambda model: model.steps,
+                                                            "average empire area": lambda model: model.avg_empire_area,
                                                             "number of empires with more than 5 hexes": lambda model: len([empire for empire in model.empires if empire.size > 5]),
                                                             "5-50 Hexes": lambda model: model.area_histogram[0],
                                                             "51-100 Hexes": lambda model: model.area_histogram[1],
@@ -350,6 +414,12 @@ class EuropeModel(mesa.Model):
             self.default_empire.add_cell(cell)
             self.schedule.add(cell)
             cell.setup_neighbors()
+            if self.show_heatmap:
+                cell.show_heatmap = True
+
+        # spaghetti code to fix coastal cells
+        for cell in [cell for cell in self.cells if cell.coastal]:
+            cell.fix_coastal()
 
         # removes the elevation layer after cell creation to improve performance
         self.space.layers.pop()
@@ -394,25 +464,65 @@ class EuropeModel(mesa.Model):
     # model actions on each step
     def step(self):
 
-        # updates empires
-        # removes them from the empire list if their size is 0 or less
-        for empire in self.empires:
-            empire.update_size()
-            if empire.size <= 0:
-                self.empires.remove(empire)
-                continue
+        if self.running:
+            # updates empires
+            # removes them from the empire list if their size is 0 or less
+            for empire in self.empires:
+                empire.update_size()
+                if empire.size <= 0:
+                    self.empires.remove(empire)
+                    continue
 
-            empire.update_center()
-            empire.update_avg_asabiya()
+                empire.update_center()
+                empire.update_avg_asabiya()
 
-        # updates data variables
-        self.update_avg_area()
+            # updates data variables
+            self.update_avg_area()
 
-        # collects data on each step
-        self.datacollector.collect(self)
+            # collects data on each step
+            self.datacollector.collect(self)
 
-        # steps all cells in a random order
-        self.schedule.step()
+            # steps all cells in a random order
+            self.schedule.step()
 
-        # tracks running time
-        self.steps += 1
+            # tracks running time
+            self.steps += 1
+
+            # stops the simulation after the inputted number of steps have occurred
+            if self.steps >= self.sim_length:
+                self.running = False
+
+                # sets the running value for the cells to be false, so they display appropriately
+                for cell in self.cells:
+                    cell.running = False
+
+                # list of all empire areas at the end of the simulation
+                area_list = []
+                for empire in self.empires:
+                    if empire.size > 5:
+                        area_list.append(empire.size)
+
+                # area distribution histogram
+                max_value = ((max(area_list) // 50) + 1) * 50
+                histogram = sns.histplot(data=area_list, bins=(max_value // 50), binrange=(0, max_value))
+                histogram.set(xlabel="area in hexes", ylabel="frequency")
+                plot.show()
+
+                # average empire area line graph
+                data = self.datacollector.get_model_vars_dataframe()
+                avg_area = sns.lineplot(data=data, x="steps", y="average empire area")
+                avg_area.set(xlabel="time (steps)")
+                plot.show()
+
+                # TO DO:
+                # find equivalencies between cells and real world area
+                # area_list = []
+                # for empire in self.empires:
+                #     if empire.size > 5:
+                #         area_list.append(math.log(empire.size))
+                #
+                # max_value = math.ceil(max(area_list))
+                # min_value = math.floor(min(area_list))
+                # histogram = sns.histplot(data=area_list, bins=10, binrange=(min_value, max_value))
+                # histogram.set(xlabel="area in sq km", ylabel="frequency")
+                # plot.show()
