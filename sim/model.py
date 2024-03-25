@@ -29,9 +29,6 @@ class EmpireCell(mg.GeoAgent):
 
         # uses the longitudinal and latitudinal ratio of the cell's position to determine its index in the raster layer
         # has to rounded, so it's not exact, sue me
-        self.x_index = round(((180 + self.x) / 360) * self.model.space.layers[0].width)
-        self.y_index = round(((90 + self.y) / 180) * self.model.space.layers[0].height)
-
         total_bounds = self.model.space.total_bounds
         if self.x > 0:
             self.x_index = round(((self.x + abs(total_bounds[0])) / (total_bounds[2] - total_bounds[0])) * self.model.space.layers[0].width)
