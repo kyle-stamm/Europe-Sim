@@ -32,6 +32,23 @@ class EmpireCell(mg.GeoAgent):
         self.x_index = round(((180 + self.x) / 360) * self.model.space.layers[0].width)
         self.y_index = round(((90 + self.y) / 180) * self.model.space.layers[0].height)
 
+        total_bounds = self.model.space.total_bounds
+        if self.x > 0:
+            self.x_index = round(((self.x + abs(total_bounds[0])) / (total_bounds[2] - total_bounds[0])) * self.model.space.layers[0].width)
+        else:
+            self.x_index = round((abs(total_bounds[0]) + self.x) / (total_bounds[2] - total_bounds[0]) * self.model.space.layers[0].width)
+        self.y_index = round(((self.y - total_bounds[1]) / (total_bounds[3] - total_bounds[1])) * self.model.space.layers[0].height)
+
+        if self.x_index > self.model.space.layers[0].width - 1:
+            self.x_index = self.model.space.layers[0].width - 1
+        elif self.x_index < 0:
+            self.x_index = 0
+
+        if self.y_index > self.model.space.layers[0].height - 1:
+            self.y_index = self.model.space.layers[0].height - 1
+        elif self.y_index < 0:
+            self.y_index = 0
+
         # assigns the cell from the raster layer using those indexes
         self.elevation = self.model.space.layers[0][(self.x_index, self.y_index)].elevation
         if self.elevation == -32768:
@@ -47,6 +64,7 @@ class EmpireCell(mg.GeoAgent):
         self.coastal = False
         self.running = True
         self.show_heatmap = False
+        self.quartiles = [0, 0, 0]
 
         self.times_changed_hands = -1
 
@@ -338,7 +356,7 @@ class EuropeModel(mesa.Model):
     asa_growth = 0.2
     asa_decay = 0.1
 
-    def __init__(self, power_decline=4, sim_length=200, show_heatmap=False):
+    def __init__(self, power_decline=4, sim_length=200, show_heatmap=False, showSeabornGraphs=True):
         super().__init__()
 
         # power decline is determined by the UI slider
@@ -350,6 +368,7 @@ class EuropeModel(mesa.Model):
 
         # tracks whether the simulation is running
         self.running = True
+        self.showSeabornGraphs = showSeabornGraphs
 
         # stores whether the simulation shows the heatmap at the end of its runtime
         self.show_heatmap = show_heatmap
@@ -370,7 +389,9 @@ class EuropeModel(mesa.Model):
 
         # data collector
         # format is {<datapoint name>: lambda model: model.<reporting function or variable>}
-        self.datacollector = DataCollector(model_reporters={"steps": lambda model: model.steps,
+        self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
+                                                            "starting y": lambda model: model.starting_y,
+                                                            "steps": lambda model: model.steps,
                                                             "average empire area": lambda model: model.avg_empire_area,
                                                             "number of empires with more than 5 hexes": lambda model: len([empire for empire in model.empires if empire.size > 5]),
                                                             "5-50 Hexes": lambda model: model.area_histogram[0],
@@ -428,6 +449,8 @@ class EuropeModel(mesa.Model):
 
         # picks a random cell
         starting_cells = [self.cells[random.randint(0, len(self.cells) - 1)]]
+        self.starting_x = starting_cells[0].x
+        self.starting_y = starting_cells[0].y
 
         # initializes its neighbors as part of the starting empire as well
         # checks to make sure its neighbors are actually close to it
@@ -492,37 +515,47 @@ class EuropeModel(mesa.Model):
             if self.steps >= self.sim_length:
                 self.running = False
 
+                max_times = max([cell.times_changed_hands for cell in self.cells])
+                first_quarter = 0.75 * max_times
+                second_quarter = 0.5 * max_times
+                third_quarter = 0.25 * max_times
+
                 # sets the running value for the cells to be false, so they display appropriately
                 for cell in self.cells:
                     cell.running = False
+                    cell.quartiles[0] = first_quarter
+                    cell.quartiles[1] = second_quarter
+                    cell.quartiles[2] = third_quarter
 
-                # list of all empire areas at the end of the simulation
-                area_list = []
-                for empire in self.empires:
-                    if empire.size > 5:
-                        area_list.append(empire.size)
+                if self.showSeabornGraphs:
 
-                # area distribution histogram
-                max_value = ((max(area_list) // 50) + 1) * 50
-                histogram = sns.histplot(data=area_list, bins=(max_value // 50), binrange=(0, max_value))
-                histogram.set(xlabel="area in hexes", ylabel="frequency")
-                plot.show()
+                    # list of all empire areas at the end of the simulation
+                    area_list = []
+                    for empire in self.empires:
+                        if empire.size > 5:
+                            area_list.append(empire.size)
 
-                # average empire area line graph
-                data = self.datacollector.get_model_vars_dataframe()
-                avg_area = sns.lineplot(data=data, x="steps", y="average empire area")
-                avg_area.set(xlabel="time (steps)")
-                plot.show()
+                    # area distribution histogram
+                    max_value = ((max(area_list) // 50) + 1) * 50
+                    histogram = sns.histplot(data=area_list, bins=(max_value // 50), binrange=(0, max_value))
+                    histogram.set(xlabel="area in hexes", ylabel="frequency")
+                    plot.show()
 
-                # TO DO:
-                # find equivalencies between cells and real world area
-                # area_list = []
-                # for empire in self.empires:
-                #     if empire.size > 5:
-                #         area_list.append(math.log(empire.size))
-                #
-                # max_value = math.ceil(max(area_list))
-                # min_value = math.floor(min(area_list))
-                # histogram = sns.histplot(data=area_list, bins=10, binrange=(min_value, max_value))
-                # histogram.set(xlabel="area in sq km", ylabel="frequency")
-                # plot.show()
+                    # average empire area line graph
+                    data = self.datacollector.get_model_vars_dataframe()
+                    avg_area = sns.lineplot(data=data, x="steps", y="average empire area")
+                    avg_area.set(xlabel="time (steps)")
+                    plot.show()
+
+                    # TO DO:
+                    # find equivalencies between cells and real world area
+                    # area_list = []
+                    # for empire in self.empires:
+                    #     if empire.size > 5:
+                    #         area_list.append(math.log(empire.size))
+                    #
+                    # max_value = math.ceil(max(area_list))
+                    # min_value = math.floor(min(area_list))
+                    # histogram = sns.histplot(data=area_list, bins=10, binrange=(min_value, max_value))
+                    # histogram.set(xlabel="area in sq km", ylabel="frequency")
+                    # plot.show()

@@ -11,77 +11,73 @@ from mesa.visualization.UserParam import Slider, Checkbox, NumberInput
 # defines how agents are portrayed on the map
 def agent_portrayal(agent):
 
-    if isinstance(agent, EmpireCell):
+    # see cell elevation
+    # if agent.elevation > 1500:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "Red",
+    #                  "radius": 0.001
+    #                  }
+    # elif agent.elevation > 1000:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "Orange",
+    #                  "radius": 0.001
+    #                  }
+    # elif agent.elevation > 500:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "Yellow",
+    #                  "radius": 0.001
+    #                  }
+    # else:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "Green",
+    #                  "radius": 0.001
+    #                  }
 
-        # see cell elevation
-        # if agent.elevation > 1500:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Red",
-        #                  "radius": 0.001
-        #                  }
-        # elif agent.elevation > 1000:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Orange",
-        #                  "radius": 0.001
-        #                  }
-        # elif agent.elevation > 500:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Yellow",
-        #                  "radius": 0.001
-        #                  }
-        # else:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Green",
-        #                  "radius": 0.001
-        #                  }
+    # see coastal cells
+    # if agent.coastal:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "Red",
+    #                  "radius": 0.001
+    #                  }
+    # else:
+    #     portrayal = {"shape": "circle",
+    #                  "color": "YellowGreen",
+    #                  "radius": 0.001
+    #                  }
 
+    if agent.running or not agent.show_heatmap:
 
-        # see coastal cells
-        # if agent.coastal:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Red",
-        #                  "radius": 0.001
-        #                  }
-        # else:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Green",
-        #                  "radius": 0.001
-        #                  }
-
-        if agent.running or not agent.show_heatmap:
-            # dictionary of portrayal parameters
+        # dictionary of portrayal parameters
+        portrayal = {"shape": "circle",
+                     "color": agent.color,
+                     "radius": 0.001
+                     }
+    else:
+        if agent.times_changed_hands == 0:
             portrayal = {"shape": "circle",
-                         "color": agent.color,
+                         "color": "grey",
+                         "radius": 0.001
+                         }
+        elif agent.times_changed_hands > agent.quartiles[0]:
+            portrayal = {"shape": "circle",
+                         "color": "Red",
+                         "radius": 0.001
+                         }
+        elif agent.times_changed_hands > agent.quartiles[1]:
+            portrayal = {"shape": "circle",
+                         "color": "Orange",
+                         "radius": 0.001
+                         }
+        elif agent.times_changed_hands > agent.quartiles[2]:
+            portrayal = {"shape": "circle",
+                         "color": "Yellow",
                          "radius": 0.001
                          }
         else:
-            if agent.times_changed_hands == 0:
-                portrayal = {"shape": "circle",
-                             "color": "grey",
-                             "radius": 0.001
-                             }
-            elif agent.times_changed_hands > 75:
-                portrayal = {"shape": "circle",
-                             "color": "Red",
-                             "radius": 0.001
-                             }
-            elif agent.times_changed_hands > 50:
-                portrayal = {"shape": "circle",
-                             "color": "Yellow",
-                             "radius": 0.001
-                             }
-            elif agent.times_changed_hands > 25:
-                portrayal = {"shape": "circle",
-                             "color": "YellowGreen",
-                             "radius": 0.001
-                             }
-            else:
-                portrayal = {"shape": "circle",
-                             "color": "DarkGreen",
-                             "radius": 0.001
-                             }
-    else:
-        portrayal = (0, 0, 0, 0)
+            portrayal = {"shape": "circle",
+                         "color": "YellowGreen",
+                         "radius": 0.001
+                         }
 
     return portrayal
 
