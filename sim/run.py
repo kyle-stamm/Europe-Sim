@@ -1,23 +1,27 @@
+
 import mesa
 import pandas
 
 from model import EuropeModel
 
 # ticks = 1
-# model = EuropeModel(power_decline=1.4, sim_length=ticks, showSeabornGraphs=False)
+# model = EuropeModel(power_decline=1.4, sim_length=ticks)
 # for x in range(ticks):
 #     model.step()
 
+# parameters to run the batch run tests over
+# format is {"<parameter name>": <single value of list of values>, ...}
+power_decline_test_parameters = {"power_decline": [x / 10.0 for x in range(1, 81)]}
+starting_point_test_parameters = {"power_decline": 4.0}
 
-power_decline_test_parameters = {"power_decline": [x / 10.0 for x in range(1, 81)], "showSeabornGraphs": False}
-starting_point_test_parameters = {"power_decline": 4.0, "showSeabornGraphs": False}
-# parameters = {"power_decline": range(1, 9), "showSeabornGraphs": False}
-area_vs_power_decline_columns = ['power_decline', 'average empire area']
-num_empires_columns = ['power_decline', 'number of empires with more than 5 hexes']
+# columns to include in the spreadsheet output
+# have to have the same names as the reporters in the model's datacollector
+area_vs_power_decline_columns = ['power_decline', 'Average Empire Area']
+num_empires_columns = ['power_decline', 'Number of Empires']
 area_histogram_columns = ["power_decline", "5-50 Hexes", "51-100 Hexes", "101-150 Hexes", "151-200 Hexes",
                           "201-250 Hexes", "251-300 Hexes", "301-350 Hexes", "351-400 Hexes", "401-450 Hexes",
                           "451-500 Hexes", "501-550 Hexes", "551-600 Hexes", "601 or more Hexes"]
-starting_point_columns = ['starting x', 'starting y', 'average empire area']
+starting_point_columns = ['starting x', 'starting y', 'Average Empire Area']
 
 if __name__ == '__main__':
 
