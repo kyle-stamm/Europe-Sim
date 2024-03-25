@@ -132,15 +132,18 @@ class EmpireCell(mg.GeoAgent):
         # randomly chooses a neighbor to attack
         attack_choice = random.choice(neighbors)
 
-        # calculation of the attacked cell's elevation modifier
-        # easier to win if the attacked cell is at a lower elevation
-        # harder to win if the attacked cell is at a higher elevation
-        if (self.elevation - attack_choice.elevation) > 0:
-            elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
-        elif (self.elevation - attack_choice.elevation) < 0:
-            elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
-            if elevation_modifier <= 0:
-                elevation_modifier = 0.01
+        if self.model.use_elevation:
+            # calculation of the attacked cell's elevation modifier
+            # easier to win if the attacked cell is at a lower elevation
+            # harder to win if the attacked cell is at a higher elevation
+            if (self.elevation - attack_choice.elevation) > 0:
+                elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
+            elif (self.elevation - attack_choice.elevation) < 0:
+                elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+                if elevation_modifier <= 0:
+                    elevation_modifier = 0.01
+            else:
+                elevation_modifier = 1
         else:
             elevation_modifier = 1
 
@@ -228,15 +231,18 @@ class EmpireCell(mg.GeoAgent):
             else:
                 return
 
-            # calculation of the attacked cell's elevation modifier
-            # easier to win if the attacked cell is at a lower elevation
-            # harder to win if the attacked cell is at a higher elevation
-            if (self.elevation - attack_choice.elevation) > 0:
-                elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
-            elif (self.elevation - attack_choice.elevation) < 0:
-                elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
-                if elevation_modifier <= 0:
-                    elevation_modifier = 0.01
+            if self.model.use_elevation:
+                # calculation of the attacked cell's elevation modifier
+                # easier to win if the attacked cell is at a lower elevation
+                # harder to win if the attacked cell is at a higher elevation
+                if (self.elevation - attack_choice.elevation) > 0:
+                    elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
+                elif (self.elevation - attack_choice.elevation) < 0:
+                    elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+                    if elevation_modifier <= 0:
+                        elevation_modifier = 0.01
+                else:
+                    elevation_modifier = 1
             else:
                 elevation_modifier = 1
 

@@ -158,6 +158,8 @@ show_heatmap = Checkbox("Show heatmap at end?", value=False)
 show_elevation = Checkbox("Show elevation?", value=False)
 show_coastal = Checkbox("Show coastal cells?", value=False)
 
+use_elevation = Checkbox("Elevation Modifier?", value=True)
+
 # dictionary of model parameters to be passed into the server
 # can modify with user settable parameters like sliders
 model_params = {
@@ -165,6 +167,7 @@ model_params = {
     "show_heatmap": show_heatmap,
     "show_elevation": show_elevation,
     "show_coastal": show_coastal,
+    "use_elevation": use_elevation,
     "power_decline": power_decline_slider,
     "delta_power": delta_power_slider,
     "asa_growth": asa_growth_slider,

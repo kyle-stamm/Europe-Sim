@@ -15,6 +15,7 @@ from empire import Empire
 class EuropeModel(mesa.Model):
 
     def __init__(self, power_decline=4, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1,
+                 use_elevation=True,
                  show_heatmap=False, show_elevation=False, show_coastal=False, show_seaborn_graphs=False):
         super().__init__()
 
@@ -42,6 +43,8 @@ class EuropeModel(mesa.Model):
 
         self.show_elevation = show_elevation
         self.show_coastal = show_coastal
+
+        self.use_elevation = use_elevation
 
         # sets schedule to be random activation so as not to favor one empire
         self.schedule = mesa.time.RandomActivation(self)
@@ -76,7 +79,9 @@ class EuropeModel(mesa.Model):
                                                             "451-500 Hexes": lambda model: model.area_histogram[9],
                                                             "501-550 Hexes": lambda model: model.area_histogram[10],
                                                             "551-600 Hexes": lambda model: model.area_histogram[11],
-                                                            "601 or more Hexes": lambda model: model.area_histogram[12]})
+                                                            "601 or more Hexes": lambda model: model.area_histogram[12]},
+                                           agent_reporters={"Times Changed Hands": "times_changed_hands",
+                                                            "Elevation": "elevation"})
 
         # creates the geo space with the GeoJSON coordinate system
         self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)
@@ -221,7 +226,7 @@ class EuropeModel(mesa.Model):
 
                     # average empire area line graph
                     data = self.datacollector.get_model_vars_dataframe()
-                    avg_area = sns.lineplot(data=data, x="steps", y="average empire area")
+                    avg_area = sns.lineplot(data=data, x="steps", y="Average Empire Area")
                     avg_area.set(xlabel="time (steps)")
                     plot.show()
 
