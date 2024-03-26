@@ -45,6 +45,7 @@ class EmpireCell(mg.GeoAgent):
         self.elevation = self.model.space.layers[0][(self.x_index, self.y_index)].elevation
         if self.elevation == -32768:
             self.elevation = 1
+        self.elevation_constant = self.model.elevation_constant
 
         # old way of implementing the elevation modifier
         # probably bad?
@@ -137,11 +138,11 @@ class EmpireCell(mg.GeoAgent):
             # easier to win if the attacked cell is at a lower elevation
             # harder to win if the attacked cell is at a higher elevation
             if (self.elevation - attack_choice.elevation) > 0:
-                elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
-            elif (self.elevation - attack_choice.elevation) < 0:
-                elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+                elevation_modifier = (self.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.elevation_constant
                 if elevation_modifier <= 0:
                     elevation_modifier = 0.01
+            elif (self.elevation - attack_choice.elevation) < 0:
+                elevation_modifier = (self.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.elevation_constant
             else:
                 elevation_modifier = 1
         else:
@@ -236,11 +237,11 @@ class EmpireCell(mg.GeoAgent):
                 # easier to win if the attacked cell is at a lower elevation
                 # harder to win if the attacked cell is at a higher elevation
                 if (self.elevation - attack_choice.elevation) > 0:
-                    elevation_modifier = 1 + math.log(self.elevation - attack_choice.elevation)
-                elif (self.elevation - attack_choice.elevation) < 0:
-                    elevation_modifier = 1 - math.log(abs(self.elevation - attack_choice.elevation))
+                    elevation_modifier = (self.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.elevation_constant
                     if elevation_modifier <= 0:
                         elevation_modifier = 0.01
+                elif (self.elevation - attack_choice.elevation) < 0:
+                    elevation_modifier = (self.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.elevation_constant
                 else:
                     elevation_modifier = 1
             else:

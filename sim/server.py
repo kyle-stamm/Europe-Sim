@@ -69,6 +69,41 @@ def agent_portrayal(agent):
                      "description": (round(agent.x, 2), round(agent.y, 2))
                      }
     else:
+        # if agent.times_changed_hands == 0:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "grey",
+        #                  "radius": 2,
+        #                  "weight": 1,
+        #                  "description": (round(agent.x, 2), round(agent.y, 2))
+        #                  }
+        # elif agent.times_changed_hands > agent.quartiles[0]:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Red",
+        #                  "radius": 2,
+        #                  "weight": 1,
+        #                  "description": (round(agent.x, 2), round(agent.y, 2))
+        #                  }
+        # elif agent.times_changed_hands > agent.quartiles[1]:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Orange",
+        #                  "radius": 2,
+        #                  "weight": 1,
+        #                  "description": (round(agent.x, 2), round(agent.y, 2))
+        #                  }
+        # elif agent.times_changed_hands > agent.quartiles[2]:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "Yellow",
+        #                  "radius": 2,
+        #                  "weight": 1,
+        #                  "description": (round(agent.x, 2), round(agent.y, 2))
+        #                  }
+        # else:
+        #     portrayal = {"shape": "circle",
+        #                  "color": "YellowGreen",
+        #                  "radius": 2,
+        #                  "weight": 1,
+        #                  "description": (round(agent.x, 2), round(agent.y, 2))
+        #                  }
         if agent.times_changed_hands == 0:
             portrayal = {"shape": "circle",
                          "color": "grey",
@@ -76,21 +111,21 @@ def agent_portrayal(agent):
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > agent.quartiles[0]:
+        elif agent.times_changed_hands > 75:
             portrayal = {"shape": "circle",
                          "color": "Red",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > agent.quartiles[1]:
+        elif agent.times_changed_hands > 50:
             portrayal = {"shape": "circle",
                          "color": "Orange",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > agent.quartiles[2]:
+        elif agent.times_changed_hands > 25:
             portrayal = {"shape": "circle",
                          "color": "Yellow",
                          "radius": 2,
@@ -147,6 +182,7 @@ power_decline_slider = Slider('Power Decline', value=4, min_value=0.1, max_value
 delta_power_slider = Slider('Delta Power', value=0.1, min_value=0.01, max_value=0.2, step=0.01)
 asa_growth_slider = Slider('Asabiya Growth', value=0.2, min_value=0.01, max_value=0.3, step=0.01)
 asa_decay_slider = Slider('Asabiya Decay', value=0.1, min_value=0.01, max_value=0.3, step=0.01)
+elevation_constant_slider = Slider('Elevation Constant', value=5, min_value=1, max_value=10)
 
 # number input for setting length of the simulation
 sim_length = NumberInput("Length of Simulation (Steps)", value=200)
@@ -168,6 +204,7 @@ model_params = {
     "show_elevation": show_elevation,
     "show_coastal": show_coastal,
     "use_elevation": use_elevation,
+    "elevation_constant": elevation_constant_slider,
     "power_decline": power_decline_slider,
     "delta_power": delta_power_slider,
     "asa_growth": asa_growth_slider,
