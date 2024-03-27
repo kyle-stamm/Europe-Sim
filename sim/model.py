@@ -14,7 +14,7 @@ from empire import Empire
 # model class
 class EuropeModel(mesa.Model):
 
-    def __init__(self, power_decline=4, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=5,
+    def __init__(self, power_decline=2, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=4.5,
                  use_elevation=True,
                  show_heatmap=False, show_elevation=False, show_coastal=False, show_seaborn_graphs=False):
         super().__init__()

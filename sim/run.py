@@ -9,13 +9,13 @@ from model import EuropeModel
 # parameters to run the batch run tests over
 # format is {"<parameter name>": <single value of list of values>, ...}
 power_decline_test_parameters = {"power_decline": [x / 10.0 for x in range(1, 81)]}
-starting_point_test_parameters = {"power_decline": 4.0}
+starting_point_test_parameters = {"power_decline": 2}
 delta_power_test_parameters = {"delta_power": [x / 100.0 for x in range(1, 21)]}
 asa_growth_test_parameters = {"asa_growth": [x / 100.0 for x in range(1, 31)]}
 asa_decay_test_parameters = {"asa_decay": [x / 100.0 for x in range(1, 31)]}
 use_elevation_test_parameters = {"use_elevation": [True, False], "power_decline": [x / 10.0 for x in range(1, 81)]}
-heatmap_test_parameters = {"power_decline": 4}
-elevation_constant_test_parameters = {"elevation_constant": [x for x in range(0, 10)]}
+heatmap_test_parameters = {"power_decline": 2}
+elevation_constant_test_parameters = {"elevation_constant": [x / 2 for x in range(0, 20)]}
 
 # columns to include in the spreadsheet output
 # have to have the same names as the reporters in the model's datacollector
@@ -52,7 +52,7 @@ if __name__ == '__main__':
             for x in range(ticks):
                 model.step()
         case "2":
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=power_decline_test_parameters, number_processes=8, max_steps=400, iterations=1)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=power_decline_test_parameters, number_processes=8, max_steps=400, iterations=3)
 
             power_decline_dataframe = pandas.DataFrame(data=data, columns=(power_decline_columns + default_columns))
             power_decline_dataframe.to_csv(path_or_buf='output_data/power_decline.csv', index_label="trial")
@@ -124,31 +124,38 @@ if __name__ == '__main__':
             delta_power_dataframe.to_csv(path_or_buf="output_data/use_elevation.csv", index_label="trial")
         case "8":
             ticks = 400
-            model = EuropeModel(power_decline=8, sim_length=ticks)
-            for x in range(ticks):
-                model.step()
+            params = [x / 2 for x in range(0, 20)]
+            for elev in params:
+                model = EuropeModel(sim_length=ticks, elevation_constant=elev)
+                for x in range(ticks):
+                    model.step()
 
-            elevations = []
-            times_changed_hands = []
-            for cell in model.cells:
-                elevations.append(cell.elevation)
-                times_changed_hands.append(cell.times_changed_hands)
+                elevations = []
+                times_changed_hands = []
+                for cell in model.cells:
+                    elevations.append(cell.elevation)
+                    times_changed_hands.append(cell.times_changed_hands)
 
-            data = {"Elevation": elevations, "Times Changed Hands": times_changed_hands}
+                data = {"Elevation": elevations, "Times Changed Hands": times_changed_hands}
 
-            heatmap_dataframe = pandas.DataFrame(data)
-            heatmap_dataframe.to_csv(path_or_buf="output_data/heatmap.csv", index_label="Cell")
+                heatmap_dataframe = pandas.DataFrame(data)
+                heatmap_dataframe.to_csv(path_or_buf="output_data/heatmap.csv", index_label="Cell")
 
-            elev_vs_times = sns.scatterplot(data=heatmap_dataframe, x="Elevation", y="Times Changed Hands")
-            elev_vs_times.set(xlabel="Elevation", ylabel="Times Changed Hands")
-            plot.show()
+                elev_vs_times = sns.scatterplot(data=heatmap_dataframe, x="Elevation", y="Times Changed Hands")
+                elev_vs_times.set(title=f"elevation constant: {elev}", xlabel="Elevation", ylabel="Times Changed Hands")
+                plot.show()
+
         case "9":
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=elevation_constant_test_parameters, number_processes=8, max_steps=400, iterations=8)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=elevation_constant_test_parameters, number_processes=8, max_steps=400, iterations=10)
 
             elevation_constant_dataframe = pandas.DataFrame(data=data, columns=(elevation_constant_columns + default_columns))
             elevation_constant_dataframe.to_csv(path_or_buf="output_data/elevation_constant.csv", index_label="trial")
 
             elev_const_vs_area = sns.scatterplot(data=elevation_constant_dataframe, x="elevation_constant", y="Average Empire Area")
             elev_const_vs_area.set(xlabel="Elevation Constant", ylabel="Average Empire Area")
+            plot.show()
+
+            elev_const_vs_num_empires = sns.scatterplot(data=elevation_constant_dataframe, x="elevation_constant", y="Number of Empires")
+            elev_const_vs_num_empires.set(xlabel="Elevation Constant", ylabel="Number of Empires")
             plot.show()
 

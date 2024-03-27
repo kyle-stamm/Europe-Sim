@@ -47,13 +47,6 @@ class EmpireCell(mg.GeoAgent):
             self.elevation = 1
         self.elevation_constant = self.model.elevation_constant
 
-        # old way of implementing the elevation modifier
-        # probably bad?
-        # if self.elevation > math.e:
-        #     self.elevation_modifier = math.log(self.elevation)
-        # else:
-        #     self.elevation_modifier = 1
-
         # whether the cell is coastal or not
         self.coastal = False
 

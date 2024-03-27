@@ -178,11 +178,11 @@ area_histogram = BarChartModule([{"Label": "5-50 Hexes", "Color": "#cc2121"},
 grid = mesa_geo.visualization.MapModule(agent_portrayal, [46, 17], 3.75, tiles=xyz.CartoDB.Positron, map_width=900, map_height=600)
 
 # slider for inputting power decline
-power_decline_slider = Slider('Power Decline', value=4, min_value=0.1, max_value=8, step=0.1)
+power_decline_slider = Slider('Power Decline', value=2, min_value=0.1, max_value=8, step=0.1)
 delta_power_slider = Slider('Delta Power', value=0.1, min_value=0.01, max_value=0.2, step=0.01)
 asa_growth_slider = Slider('Asabiya Growth', value=0.2, min_value=0.01, max_value=0.3, step=0.01)
 asa_decay_slider = Slider('Asabiya Decay', value=0.1, min_value=0.01, max_value=0.3, step=0.01)
-elevation_constant_slider = Slider('Elevation Constant', value=5, min_value=1, max_value=10)
+elevation_constant_slider = Slider('Elevation Constant', value=4.5, min_value=0, max_value=9, step=0.5)
 
 # number input for setting length of the simulation
 sim_length = NumberInput("Length of Simulation (Steps)", value=200)
