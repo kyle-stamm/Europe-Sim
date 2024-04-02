@@ -45,7 +45,12 @@ class EmpireCell(mg.GeoAgent):
         self.elevation = self.model.space.layers[0][(self.x_index, self.y_index)].elevation
         if self.elevation == -32768:
             self.elevation = 1
-        self.elevation_constant = self.model.elevation_constant
+
+        self.power_decline_bonus = 0
+        self.delta_power_bonus = 0
+        self.elevation_bonus = 1
+        self.asa_growth_bonus = 0
+        self.asa_decay_bonus = 0
 
         # whether the cell is coastal or not
         self.coastal = False
@@ -61,7 +66,7 @@ class EmpireCell(mg.GeoAgent):
         self.show_coastal = False
 
         # determines which quartile of the heatmap data the cell falls into
-        self.quartiles = [0, 0, 0]
+        self.percentiles = []
 
         # counts how many times the cell has changed hands between empires
         self.times_changed_hands = -1
@@ -75,6 +80,13 @@ class EmpireCell(mg.GeoAgent):
         # initial asabiya
         self.asabiya = 0.001
         self.power = self.asabiya
+        self.asa_growth = self.model.asa_growth
+        self.asa_decay = self.model.asa_decay
+
+        self.power_decline = self.model.power_decline
+        self.delta_power = self.model.delta_power
+
+        self.technology = []
 
         self.id = unique_id
 
@@ -116,9 +128,9 @@ class EmpireCell(mg.GeoAgent):
 
         # grows or shrinks asabiya according to whether the cell is a border cell
         if border_cell:
-            self.asabiya += self.model.asa_growth * self.asabiya * (1 - self.asabiya)
+            self.asabiya += self.asa_growth * self.asabiya * (1 - self.asabiya)
         else:
-            self.asabiya -= self.model.asa_decay * self.asabiya
+            self.asabiya -= self.asa_decay * self.asabiya
 
     # allows the cell to attack one of its neighbors
     def attack(self, neighbors):
@@ -131,18 +143,19 @@ class EmpireCell(mg.GeoAgent):
             # easier to win if the attacked cell is at a lower elevation
             # harder to win if the attacked cell is at a higher elevation
             if (self.elevation - attack_choice.elevation) > 0:
-                elevation_modifier = (self.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.elevation_constant
+                elevation_modifier = (self.model.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.model.elevation_constant
                 if elevation_modifier <= 0:
                     elevation_modifier = 0.01
             elif (self.elevation - attack_choice.elevation) < 0:
-                elevation_modifier = (self.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.elevation_constant
+                elevation_modifier = (self.model.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.model.elevation_constant
             else:
                 elevation_modifier = 1
         else:
             elevation_modifier = 1
+        elevation_modifier /= self.elevation_bonus
 
         # determines whether the difference power between the cells is greater than the delta_power value
-        if self.power - (attack_choice.power * elevation_modifier) > self.model.delta_power:
+        if self.power - (attack_choice.power * elevation_modifier) > self.delta_power:
 
             # if it is, adds the attacked cell to the attacker's empire
 
@@ -157,6 +170,10 @@ class EmpireCell(mg.GeoAgent):
 
             # sets the attacked cell's asabiya to be the average of the two cells
             attack_choice.asabiya = (self.asabiya + attack_choice.asabiya) / 2.0
+            attack_choice.clear_technology()
+
+            for tech in self.technology:
+                attack_choice.add_technology(tech)
 
     # sets up the neighbors for each cell
     def setup_neighbors(self):
@@ -187,6 +204,63 @@ class EmpireCell(mg.GeoAgent):
         else:
             self.coastal = False
 
+    def add_technology(self, tech):
+        self.technology.append(tech)
+        self.technology[len(self.technology) - 1].use()
+
+    def clear_technology(self):
+        self.technology.clear()
+
+        self.power_decline = self.model.power_decline
+        self.power_decline_bonus = 0
+
+        self.asa_growth = self.model.asa_growth
+        self.asa_growth_bonus = 0
+
+        self.asa_decay = self.model.asa_decay
+        self.asa_decay_bonus = 0
+
+        self.delta_power_bonus = self.model.delta_power
+        self.delta_power_bonus = 0
+
+        self.elevation_bonus = 1
+
+    def spread_technology(self):
+
+        spread_choice = random.choice(self.neighbors)
+        tech_choice = random.choice(self.technology)
+        if spread_choice.empire.id == 0:
+            return
+
+        for tech in spread_choice.technology:
+            if tech.tech_id == tech_choice.tech_id:
+                return
+        else:
+            if self.empire.id == spread_choice.empire.id:
+                chance = 80
+            else:
+                return
+
+            if self.model.use_elevation:
+                # calculation of the attacked cell's elevation modifier
+                # easier to win if the attacked cell is at a lower elevation
+                # harder to win if the attacked cell is at a higher elevation
+                if (self.elevation - spread_choice.elevation) > 0:
+                    elevation_modifier = (self.model.elevation_constant - math.log(self.elevation - spread_choice.elevation)) / self.model.elevation_constant
+                    if elevation_modifier <= 0:
+                        elevation_modifier = 0.01
+                elif (self.elevation - spread_choice.elevation) < 0:
+                    elevation_modifier = (self.model.elevation_constant + math.log(abs(self.elevation - spread_choice.elevation))) / self.model.elevation_constant
+                else:
+                    elevation_modifier = 1
+            else:
+                elevation_modifier = 1
+            chance /= elevation_modifier
+
+            if (random.random() * 100) <= chance:
+                spread_choice.add_technology(tech_choice)
+
+
     # cell actions each step
     def step(self):
 
@@ -197,7 +271,7 @@ class EmpireCell(mg.GeoAgent):
 
             # sets power according to the Turchin equation
             # power = empire size * average empire asabiya * e^(-1 * distance to empire's center / power decline)
-            self.power = self.empire.size * self.empire.average_asabiya * math.exp(-1 * self.distance_to_center() / self.model.power_decline)
+            self.power = self.empire.size * self.empire.average_asabiya * math.exp(-1 * self.distance_to_center() / self.power_decline)
 
             # recolors the empire
             self.color = self.empire.color
@@ -208,6 +282,8 @@ class EmpireCell(mg.GeoAgent):
             # attacks if the cell has any neighbors that are enemy cells
             if len([neighbor for neighbor in self.neighbors if neighbor.empire.id != self.empire.id]) > 0:
                 self.attack([neighbor for neighbor in self.neighbors if neighbor.empire.id != self.empire.id])
+            if len(self.technology) > 0:
+                self.spread_technology()
 
         else:
 
@@ -230,11 +306,11 @@ class EmpireCell(mg.GeoAgent):
                 # easier to win if the attacked cell is at a lower elevation
                 # harder to win if the attacked cell is at a higher elevation
                 if (self.elevation - attack_choice.elevation) > 0:
-                    elevation_modifier = (self.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.elevation_constant
+                    elevation_modifier = (self.model.elevation_constant - math.log(self.elevation - attack_choice.elevation)) / self.model.elevation_constant
                     if elevation_modifier <= 0:
                         elevation_modifier = 0.01
                 elif (self.elevation - attack_choice.elevation) < 0:
-                    elevation_modifier = (self.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.elevation_constant
+                    elevation_modifier = (self.model.elevation_constant + math.log(abs(self.elevation - attack_choice.elevation))) / self.model.elevation_constant
                 else:
                     elevation_modifier = 1
             else:
@@ -256,6 +332,7 @@ class EmpireCell(mg.GeoAgent):
                 attack_choice.empire.remove_cell(attack_choice)
                 attack_choice.empire = self.empire
                 attack_choice.asabiya = (self.asabiya + attack_choice.asabiya) / 2.0
+                attack_choice.clear_technology()
 
                 # updates the new empire
                 self.empire.update()

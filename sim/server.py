@@ -5,6 +5,7 @@ from mesa.visualization.ModularVisualization import ModularServer
 from model import EuropeModel
 from mesa.visualization.modules import BarChartModule, ChartModule, TextElement
 from mesa.visualization.UserParam import Slider, Checkbox, NumberInput
+from technology import *
 
 
 # defines how agents are portrayed on the map
@@ -61,49 +62,25 @@ def agent_portrayal(agent):
     # normal cell display
     elif agent.running or not agent.show_heatmap:
 
-        # dictionary of portrayal parameters
         portrayal = {"shape": "circle",
                      "color": agent.color,
                      "radius": 2,
                      "weight": 1,
                      "description": (round(agent.x, 2), round(agent.y, 2))
                      }
+
+        if len(agent.technology) > 0:
+            portrayal["fillOpacity"] = 1
+            if isinstance(agent.technology[0], DeltaPowerTechnology):
+                portrayal["fillColor"] = "Red"
+            elif isinstance(agent.technology[0], AsabiyaTechnology):
+                portrayal["fillColor"] = "Green"
+            elif isinstance(agent.technology[0], PowerDeclineTechnology):
+                portrayal["fillColor"] = "Blue"
+            elif isinstance(agent.technology[0], ElevationTechnology):
+                portrayal["fillColor"] = "Orange"
+
     else:
-        # if agent.times_changed_hands == 0:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "grey",
-        #                  "radius": 2,
-        #                  "weight": 1,
-        #                  "description": (round(agent.x, 2), round(agent.y, 2))
-        #                  }
-        # elif agent.times_changed_hands > agent.quartiles[0]:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Red",
-        #                  "radius": 2,
-        #                  "weight": 1,
-        #                  "description": (round(agent.x, 2), round(agent.y, 2))
-        #                  }
-        # elif agent.times_changed_hands > agent.quartiles[1]:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Orange",
-        #                  "radius": 2,
-        #                  "weight": 1,
-        #                  "description": (round(agent.x, 2), round(agent.y, 2))
-        #                  }
-        # elif agent.times_changed_hands > agent.quartiles[2]:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "Yellow",
-        #                  "radius": 2,
-        #                  "weight": 1,
-        #                  "description": (round(agent.x, 2), round(agent.y, 2))
-        #                  }
-        # else:
-        #     portrayal = {"shape": "circle",
-        #                  "color": "YellowGreen",
-        #                  "radius": 2,
-        #                  "weight": 1,
-        #                  "description": (round(agent.x, 2), round(agent.y, 2))
-        #                  }
         if agent.times_changed_hands == 0:
             portrayal = {"shape": "circle",
                          "color": "grey",
@@ -111,30 +88,37 @@ def agent_portrayal(agent):
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > 75:
+        elif agent.times_changed_hands > agent.percentiles[3]:
             portrayal = {"shape": "circle",
                          "color": "Red",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > 50:
+        elif agent.times_changed_hands > agent.percentiles[2]:
             portrayal = {"shape": "circle",
                          "color": "Orange",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        elif agent.times_changed_hands > 25:
+        elif agent.times_changed_hands > agent.percentiles[1]:
             portrayal = {"shape": "circle",
                          "color": "Yellow",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
                          }
-        else:
+        elif agent.times_changed_hands > agent.percentiles[0]:
             portrayal = {"shape": "circle",
                          "color": "YellowGreen",
+                         "radius": 2,
+                         "weight": 1,
+                         "description": (round(agent.x, 2), round(agent.y, 2))
+                         }
+        else:
+            portrayal = {"shape": "circle",
+                         "color": "Green",
                          "radius": 2,
                          "weight": 1,
                          "description": (round(agent.x, 2), round(agent.y, 2))
@@ -146,7 +130,7 @@ def agent_portrayal(agent):
 # text displays
 class AvgAreaText(TextElement):
     def render(self, model):
-        return f"Average Empire Area: {round(model.avg_empire_area, 2)}"
+        return f"Average Empire Area (Hexes): {round(model.avg_empire_area, 2)}"
 
 
 class NumEmpiresText(TextElement):
@@ -156,7 +140,7 @@ class NumEmpiresText(TextElement):
 
 
 # creates the line graphs
-avg_area_graph = ChartModule([{"Label": "Average Empire Area", "Color": "#750a05"},])
+avg_area_graph = ChartModule([{"Label": "Average Empire Area (Hexes)", "Color": "#750a05"},])
 num_empires_graph = ChartModule([{"Label": "Number of Empires", "Color": "#1e85d4"}])
 
 # creates the area histogram
@@ -186,6 +170,7 @@ elevation_constant_slider = Slider('Elevation Constant', value=4.5, min_value=0,
 
 # number input for setting length of the simulation
 sim_length = NumberInput("Length of Simulation (Steps)", value=200)
+tech_frequency = NumberInput("Frequency of Technology Drops (0 for no drops)", value=50)
 
 # checkbox for whether to show the heatmap at the end
 show_heatmap = Checkbox("Show heatmap at end?", value=False)
@@ -200,6 +185,7 @@ use_elevation = Checkbox("Elevation Modifier?", value=True)
 # can modify with user settable parameters like sliders
 model_params = {
     "sim_length": sim_length,
+    "tech_frequency": tech_frequency,
     "show_heatmap": show_heatmap,
     "show_elevation": show_elevation,
     "show_coastal": show_coastal,

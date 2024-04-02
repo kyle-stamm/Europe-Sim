@@ -1,32 +1,46 @@
 
+# 863 km^2
+# diffusion of innovation
+# muskets -> delta power
+# saddles -> power_decline
+# siege tech -> elevation
+# printing press -> asabiya
+# cesare marchetti
+
 import mesa
 import mesa_geo as mg
 import random
 from mesa import DataCollector
 from mesa_geo.raster_layers import Cell, RasterLayer
-import seaborn as sns
-from matplotlib import pyplot as plot
+from numpy import percentile
 
 from cell import EmpireCell
 from empire import Empire
+from technology import *
 
 
 # model class
 class EuropeModel(mesa.Model):
 
+    hex_to_meters = 863000000
+    tech_types = ["Asabiya", "Power Decline", "Delta Power", "Elevation"]
+
     def __init__(self, power_decline=2, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=4.5,
-                 use_elevation=True,
-                 show_heatmap=False, show_elevation=False, show_coastal=False, show_seaborn_graphs=False):
+                 tech_frequency=50, use_elevation=True,
+                show_heatmap=False, show_elevation=False, show_coastal=False):
         super().__init__()
 
         # power decline is determined by the UI slider
         self.power_decline = power_decline
 
-        # global constants
+        # initial global variables
         # determined by UI slider
         self.delta_power = delta_power
         self.asa_growth = asa_growth
         self.asa_decay = asa_decay
+
+        self.techs_dropped = []
+        self.tech_frequency = tech_frequency
 
         # sim length is determined by user input
         self.sim_length = sim_length
@@ -36,7 +50,6 @@ class EuropeModel(mesa.Model):
 
         # tracks whether the simulation is running
         self.running = True
-        self.show_seaborn_graphs = show_seaborn_graphs
 
         # stores whether the simulation shows the heatmap at the end of its runtime
         self.show_heatmap = show_heatmap
@@ -66,7 +79,8 @@ class EuropeModel(mesa.Model):
         self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
                                                             "starting y": lambda model: model.starting_y,
                                                             "steps": lambda model: model.steps,
-                                                            "Average Empire Area": lambda model: model.avg_empire_area,
+                                                            "Average Empire Area (Hexes)": lambda model: model.avg_empire_area,
+                                                            "Average Empire Area (m^2)": lambda model: model.avg_empire_area * self.hex_to_meters,
                                                             "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
                                                             "5-50 Hexes": lambda model: model.area_histogram[0],
                                                             "51-100 Hexes": lambda model: model.area_histogram[1],
@@ -164,10 +178,48 @@ class EuropeModel(mesa.Model):
         if count > 0:
             self.avg_empire_area = total / count
 
+    def tech_drop(self):
+
+        choices = []
+        for cell in self.cells:
+            if cell.empire.id != 0:
+                if len([neighbor for neighbor in cell.neighbors if neighbor.empire.id != cell.empire.id]) == 0:
+                    choices.append(cell)
+        if len(choices) == 0:
+            return
+        else:
+            cell_choice = random.choice(choices)
+
+        tech_id = len(self.techs_dropped) + 1
+        tech_type = random.choice(self.tech_types)
+        match tech_type:
+            case "Asabiya":
+                strength = random.randint(1, 20) / 100
+                tech = AsabiyaTechnology(cell_choice, strength, "Growth", tech_id)
+
+            case "Power Decline":
+                strength = random.randint(1, 7)
+                tech = PowerDeclineTechnology(cell_choice, strength, tech_id)
+
+            case "Delta Power":
+                strength = random.randint(1, 9) / 100
+                tech = DeltaPowerTechnology(cell_choice, strength, tech_id)
+
+            case "Elevation":
+                strength = random.randint(1, 150) / 100
+                tech = ElevationTechnology(cell_choice, strength, tech_id)
+
+        cell_choice.add_technology(tech)
+        self.techs_dropped.append(tech)
+
     # model actions on each step
     def step(self):
 
         if self.running:
+
+            # tracks running time
+            self.steps += 1
+
             # updates empires
             # removes them from the empire list if their size is 0 or less
             for empire in self.empires:
@@ -185,62 +237,24 @@ class EuropeModel(mesa.Model):
             # collects data on each step
             self.datacollector.collect(self)
 
+            if self.tech_frequency != 0 and self.steps > 0 and self.steps % self.tech_frequency == 0:
+                self.tech_drop()
+
             # steps all cells in a random order
             self.schedule.step()
-
-            # tracks running time
-            self.steps += 1
 
             # stops the simulation after the inputted number of steps have occurred
             if self.steps >= self.sim_length:
                 self.running = False
 
-                # determines the quartiles for heatmap data based on
-                # the maximum number of times a cell has changed hands
-                max_times = max([cell.times_changed_hands for cell in self.cells])
-                first_quarter = 0.75 * max_times
-                second_quarter = 0.5 * max_times
-                third_quarter = 0.25 * max_times
+                # determines the quartiles for the heatmap
+                percentiles = percentile([cell.times_changed_hands for cell in self.cells], [20, 60, 75, 90])
 
                 # sets the running value for the cells to be false, so they display appropriately
                 for cell in self.cells:
                     cell.running = False
-                    cell.quartiles[0] = first_quarter
-                    cell.quartiles[1] = second_quarter
-                    cell.quartiles[2] = third_quarter
-
-                if self.show_seaborn_graphs:
-
-                    # list of all empire areas at the end of the simulation
-                    area_list = []
-                    for empire in self.empires:
-                        if empire.size > 5:
-                            area_list.append(empire.size)
-
-                    # area distribution histogram
-                    max_value = ((max(area_list) // 50) + 1) * 50
-                    histogram = sns.histplot(data=area_list, bins=(max_value // 50), binrange=(0, max_value))
-                    histogram.set(xlabel="area in hexes", ylabel="frequency")
-                    plot.show()
-
-                    # average empire area line graph
-                    data = self.datacollector.get_model_vars_dataframe()
-                    avg_area = sns.lineplot(data=data, x="steps", y="Average Empire Area")
-                    avg_area.set(xlabel="time (steps)")
-                    plot.show()
-
-                    # TO DO:
-                    # find equivalencies between cells and real world area
-                    # area_list = []
-                    # for empire in self.empires:
-                    #     if empire.size > 5:
-                    #         area_list.append(math.log(empire.size))
-                    #
-                    # max_value = math.ceil(max(area_list))
-                    # min_value = math.floor(min(area_list))
-                    # histogram = sns.histplot(data=area_list, bins=10, binrange=(min_value, max_value))
-                    # histogram.set(xlabel="area in sq km", ylabel="frequency")
-                    # plot.show()
+                    for perc in percentiles:
+                        cell.percentiles.append(perc)
 
 
 # cell to store raster elevation data
