@@ -37,11 +37,12 @@ if __name__ == '__main__':
 
     match test:
         case "1":
-            ticks = 60
-            model = EuropeModel(power_decline=1.4, sim_length=ticks)
+            ticks = 1
+            model = EuropeModel(sim_length=ticks)
             for x in range(ticks):
                 model.step()
         case "2":
+            # parameters = {"power_decline": [x for x in range(1, 9)]}
             parameters = {"power_decline": [x / 10.0 for x in range(1, 81)]}
             data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=3)
 
@@ -53,8 +54,8 @@ if __name__ == '__main__':
             plot.show()
 
         case "3":
-            parameters = {"power_decline": 2}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=250)
+            parameters = {"power_decline": 4.5}
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=200)
 
             columns = ['starting x', 'starting y']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
@@ -64,17 +65,17 @@ if __name__ == '__main__':
             plot.show()
         case "4":
             parameters = {"delta_power": [x / 100.0 for x in range(1, 21)]}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=3)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=5)
 
             columns = ['delta_power']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
             dataframe.to_csv(path_or_buf="output_data/delta_power.csv", index_label="trial")
 
-            ad = sns.pairplot(data=dataframe, x_vars=["delta_power"], y_vars=["Average Empire Area (Hexes)", "Number of Empires"], height=5, aspect=1)
+            ad = sns.pairplot(data=dataframe, kind="reg", x_vars=["delta_power"], y_vars=["Average Empire Area (Hexes)", "Number of Empires"], height=5, aspect=1)
             plot.show()
         case "5":
             parameters = {"asa_growth": [x / 100.0 for x in range(1, 31)]}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=3)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=5)
 
             columns = ['asa_growth']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
@@ -84,7 +85,7 @@ if __name__ == '__main__':
             plot.show()
         case "6":
             parameters = {"asa_decay": [x / 100.0 for x in range(1, 31)]}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=3)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=5)
 
             columns = ['asa_decay']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
@@ -94,43 +95,22 @@ if __name__ == '__main__':
             plot.show()
         case "7":
             parameters = {"use_elevation": [True, False], "power_decline": [x / 10.0 for x in range(1, 81)]}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=1)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=3)
 
             columns = ['use_elevation', 'power_decline']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
             dataframe.to_csv(path_or_buf="output_data/use_elevation.csv", index_label="trial")
         case "8":
-            ticks = 400
-            params = [x / 2 for x in range(0, 20)]
-            # params = [4]
-            for elev in params:
-                model = EuropeModel(sim_length=ticks, elevation_constant=elev)
-                for x in range(ticks):
-                    model.step()
+            params = {"elevation_constant": [x for x in range(0, 10)]}
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=params, number_processes=8, max_steps=400, iterations=1)
 
-                elevations = []
-                times_changed_hands = []
-                x_coords = []
-                y_coords = []
-                x = 0
-                for cell in model.cells:
-                    if x % 10 == 0:
-                        elevations.append(cell.elevation)
-                        times_changed_hands.append(cell.times_changed_hands)
-                        x_coords.append(round(cell.x, 2))
-                        y_coords.append(round(cell.y, 2))
-
-                data = {"Elevation": elevations, "Times Changed Hands": times_changed_hands}
-
-                dataframe = pandas.DataFrame(data)
-
-                elev_vs_times = sns.scatterplot(data=dataframe, x="Elevation", y="Times Changed Hands")
-                elev_vs_times.set(title=f"elevation constant: {elev}", xlabel="Elevation", ylabel="Times Changed Hands")
-                plot.show()
+            dataframe = pandas.DataFrame(data, columns=["Elevation", "Times Changed Hands", "Elevation Constant"])
+            elev_vs_times = sns.lmplot(data=dataframe, x="Elevation", y="Times Changed Hands", hue="Elevation Constant", scatter=False)
+            plot.show()
 
         case "9":
             parameters = {"elevation_constant": [x / 2 for x in range(0, 20)]}
-            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=1)
+            data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=5)
 
             columns = ['elevation_constant']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
@@ -139,8 +119,8 @@ if __name__ == '__main__':
             elev = sns.pairplot(data=dataframe, x_vars=["elevation_constant"], y_vars=["Average Empire Area (Hexes)", "Number of Empires"], height=5, aspect=1)
             plot.show()
         case "10":
-            ticks = 400
             params = [x / 2 for x in range(0, 20)]
+            ticks = 400
             for elev in params:
                 model = EuropeModel(sim_length=ticks, elevation_constant=elev)
                 for x in range(ticks):
@@ -155,11 +135,11 @@ if __name__ == '__main__':
                 plot.show()
         case "11":
             # parameters = {"power_decline": [2, 4], "elevation_constant": [2, 4, 6, 8]}
-            parameters = {"power_decline": [x / 2 for x in range(1, 20)], "elevation_constant": [y / 2 for y in range(0, 20)]}
+            parameters = {"power_decline": [x for x in range(1, 9)], "elevation_constant": [y for y in range(0, 10)]}
             data = mesa.batch_run(model_cls=EuropeModel, parameters=parameters, number_processes=8, max_steps=400, iterations=1)
 
             columns = ['elevation_constant', 'power_decline']
             dataframe = pandas.DataFrame(data=data, columns=(columns + default_columns))
 
-            elev_and_pd = sns.pairplot(data=dataframe, kind="scatter", x_vars=["elevation_constant", "power_decline"], y_vars=["Average Empire Area (Hexes)"], height=5, aspect=1)
+            elev_and_pd = sns.pairplot(data=dataframe, x_vars=["elevation_constant"], y_vars=["Average Empire Area (Hexes)"], height=5, aspect=1, hue="power_decline")
             plot.show()

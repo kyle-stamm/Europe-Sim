@@ -7,6 +7,7 @@
 # printing press -> asabiya
 # cesare marchetti
 
+import math
 import mesa
 import mesa_geo as mg
 import random
@@ -25,9 +26,9 @@ class EuropeModel(mesa.Model):
     hex_to_meters = 863000000
     tech_types = ["Asabiya", "Power Decline", "Delta Power", "Elevation"]
 
-    def __init__(self, power_decline=2, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=4.5,
-                 tech_frequency=50, use_elevation=True,
-                show_heatmap=False, show_elevation=False, show_coastal=False):
+    def __init__(self, power_decline=2, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=4.5, tech_frequency=0,
+                 use_elevation=True, agent_reporters=True,
+                 show_heatmap=False, show_elevation=False, show_coastal=False):
         super().__init__()
 
         # power decline is determined by the UI slider
@@ -76,25 +77,37 @@ class EuropeModel(mesa.Model):
 
         # data collector
         # format is {<datapoint name>: lambda model: model.<reporting function or variable>, ...}
-        self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
-                                                            "starting y": lambda model: model.starting_y,
-                                                            "steps": lambda model: model.steps,
-                                                            "Average Empire Area (Hexes)": lambda model: model.avg_empire_area,
-                                                            "Average Empire Area (m^2)": lambda model: model.avg_empire_area * self.hex_to_meters,
-                                                            "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
-                                                            "5-50 Hexes": lambda model: model.area_histogram[0],
-                                                            "51-100 Hexes": lambda model: model.area_histogram[1],
-                                                            "101-150 Hexes": lambda model: model.area_histogram[2],
-                                                            "151-200 Hexes": lambda model: model.area_histogram[3],
-                                                            "201-250 Hexes": lambda model: model.area_histogram[4],
-                                                            "251-300 Hexes": lambda model: model.area_histogram[5],
-                                                            "301-350 Hexes": lambda model: model.area_histogram[6],
-                                                            "351-400 Hexes": lambda model: model.area_histogram[7],
-                                                            "401-450 Hexes": lambda model: model.area_histogram[8],
-                                                            "451-500 Hexes": lambda model: model.area_histogram[9],
-                                                            "501-550 Hexes": lambda model: model.area_histogram[10],
-                                                            "551-600 Hexes": lambda model: model.area_histogram[11],
-                                                            "601 or more Hexes": lambda model: model.area_histogram[12]})
+        if agent_reporters:
+            self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
+                                                                "starting y": lambda model: model.starting_y,
+                                                                "steps": lambda model: model.steps,
+                                                                "Average Empire Area (Hexes)": lambda model: model.avg_empire_area,
+                                                                "Average Empire Area (m^2)": lambda model: model.avg_empire_area * self.hex_to_meters,
+                                                                "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
+                                                                "Elevation Constant": lambda model: model.elevation_constant},
+                                               agent_reporters={"Elevation": lambda agent: agent.elevation,
+                                                                "Times Changed Hands": lambda agent: round(math.log(agent.times_changed_hands + 0.001))})
+        else:
+            self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
+                                                                "starting y": lambda model: model.starting_y,
+                                                                "steps": lambda model: model.steps,
+                                                                "Average Empire Area (Hexes)": lambda model: model.avg_empire_area,
+                                                                "Average Empire Area (m^2)": lambda model: model.avg_empire_area * self.hex_to_meters,
+                                                                "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
+                                                                "5-50 Hexes": lambda model: model.area_histogram[0],
+                                                                "51-100 Hexes": lambda model: model.area_histogram[1],
+                                                                "101-150 Hexes": lambda model: model.area_histogram[2],
+                                                                "151-200 Hexes": lambda model: model.area_histogram[3],
+                                                                "201-250 Hexes": lambda model: model.area_histogram[4],
+                                                                "251-300 Hexes": lambda model: model.area_histogram[5],
+                                                                "301-350 Hexes": lambda model: model.area_histogram[6],
+                                                                "351-400 Hexes": lambda model: model.area_histogram[7],
+                                                                "401-450 Hexes": lambda model: model.area_histogram[8],
+                                                                "451-500 Hexes": lambda model: model.area_histogram[9],
+                                                                "501-550 Hexes": lambda model: model.area_histogram[10],
+                                                                "551-600 Hexes": lambda model: model.area_histogram[11],
+                                                                "601 or more Hexes": lambda model: model.area_histogram[12],
+                                                                "Elevation Constant": lambda model: model.elevation_constant})
 
         # creates the geo space with the GeoJSON coordinate system
         self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)

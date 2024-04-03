@@ -194,7 +194,8 @@ model_params = {
     "power_decline": power_decline_slider,
     "delta_power": delta_power_slider,
     "asa_growth": asa_growth_slider,
-    "asa_decay": asa_decay_slider
+    "asa_decay": asa_decay_slider,
+    "agent_reporters": False
 }
 
 # creates and launches the server
