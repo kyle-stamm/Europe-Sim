@@ -7,27 +7,33 @@
 # printing press -> asabiya
 # cesare marchetti
 
+# aggressive vs defensive cells
+# moralizing single god vs. many gods
+# give every cell an elevation tech
+
+import geopandas as gpd
 import math
 import mesa
 import mesa_geo as mg
 import random
 from mesa import DataCollector
-from mesa_geo.raster_layers import Cell, RasterLayer
 from numpy import percentile
 
 from cell import EmpireCell
 from empire import Empire
 from technology import *
+from religion import *
 
 
 # model class
 class EuropeModel(mesa.Model):
 
     hex_to_meters = 863000000
-    tech_types = ["Asabiya", "Power Decline", "Delta Power", "Elevation"]
+    tech_types = ["Asabiya Growth", "Asabiya Decay", "Power Decline", "Delta Power", "Elevation"]
 
-    def __init__(self, power_decline=2, sim_length=200, delta_power=0.1, asa_growth=0.2, asa_decay=0.1, elevation_constant=4.5, tech_frequency=0,
-                 use_elevation=True, agent_reporters=True,
+    def __init__(self, power_decline=4, sim_length=200, delta_power=0.1,
+                 asa_growth=0.2, asa_decay=0.1, elevation_constant=6.5, tech_frequency=0,
+                 use_elevation=True, agent_reporters=True, use_warmup=False, batch_run=True,
                  show_heatmap=False, show_elevation=False, show_coastal=False):
         super().__init__()
 
@@ -39,6 +45,8 @@ class EuropeModel(mesa.Model):
         self.delta_power = delta_power
         self.asa_growth = asa_growth
         self.asa_decay = asa_decay
+
+        self.delta_power_change = delta_power
 
         self.techs_dropped = []
         self.tech_frequency = tech_frequency
@@ -57,19 +65,34 @@ class EuropeModel(mesa.Model):
 
         self.show_elevation = show_elevation
         self.show_coastal = show_coastal
+        self.agent_reporters = agent_reporters
 
         self.use_elevation = use_elevation
         self.elevation_constant = 10 - elevation_constant
+
+        self.batch_run = batch_run
+
+        self.differences = []
+        self.avg_difference = 0
 
         # sets schedule to be random activation so as not to favor one empire
         self.schedule = mesa.time.RandomActivation(self)
 
         # list of empires currently in the model
         self.empires = []
+        self.religions = []
+
+        self.default_religion = Religion(0)
+        self.default_religion.type = "non-pros"
+        self.default_religion.tolerance = 1.5
+        self.default_religion.conversion = 0
 
         # default empire that all cells start as a part of
         self.default_empire = Empire(0, self)
+        self.default_empire.color = "grey"
+
         self.avg_empire_area = 0
+        self.avg_empire_elevation = 0
 
         # area histogram
         # each element is a frequency bar
@@ -77,7 +100,7 @@ class EuropeModel(mesa.Model):
 
         # data collector
         # format is {<datapoint name>: lambda model: model.<reporting function or variable>, ...}
-        if agent_reporters:
+        if self.agent_reporters:
             self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
                                                                 "starting y": lambda model: model.starting_y,
                                                                 "steps": lambda model: model.steps,
@@ -86,7 +109,7 @@ class EuropeModel(mesa.Model):
                                                                 "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
                                                                 "Elevation Constant": lambda model: model.elevation_constant},
                                                agent_reporters={"Elevation": lambda agent: agent.elevation,
-                                                                "Times Changed Hands": lambda agent: round(math.log(agent.times_changed_hands + 0.001))})
+                                                                "Times Changed Hands": lambda agent: agent.times_changed_hands + 0.0001})
         else:
             self.datacollector = DataCollector(model_reporters={"starting x": lambda model: model.starting_x,
                                                                 "starting y": lambda model: model.starting_y,
@@ -94,6 +117,8 @@ class EuropeModel(mesa.Model):
                                                                 "Average Empire Area (Hexes)": lambda model: model.avg_empire_area,
                                                                 "Average Empire Area (m^2)": lambda model: model.avg_empire_area * self.hex_to_meters,
                                                                 "Number of Empires": lambda model: len([empire for empire in model.empires if empire.size > 5]),
+                                                                "Average Empire Elevation": lambda model: model.avg_empire_elevation,
+                                                                "Average Power Difference": lambda model: model.avg_difference,
                                                                 "5-50 Hexes": lambda model: model.area_histogram[0],
                                                                 "51-100 Hexes": lambda model: model.area_histogram[1],
                                                                 "101-150 Hexes": lambda model: model.area_histogram[2],
@@ -112,20 +137,12 @@ class EuropeModel(mesa.Model):
         # creates the geo space with the GeoJSON coordinate system
         self.space = mg.GeoSpace(crs="epsg:4326", warn_crs_conversion=False)
 
-        # adds the elevation raster layer
-        # order of precision (ascending):
-        # 1. "gis_data/elevation_10.tif"
-        # 2. "gis_data/elevation_5.tif"
-        # 3. "gis_data/elevation_2-5.tif"
-        elevation_layer = RasterLayer.from_file("gis_data/elevation_10.tif", cell_cls=ElevationCell, attr_name="elevation")
-        elevation_layer.crs = self.space.crs
-        self.space.add_layer(elevation_layer)
-
         # agent generator
         ac = mg.AgentCreator(EmpireCell, model=self)
 
         # creates cells from the GeoJSON data file
-        self.cells = ac.from_file("gis_data/europe_hex_points.geojson")
+        gdf = gpd.read_file("gis_data/hex_with_elevation.geojson")
+        self.cells = ac.from_GeoDataFrame(gdf)
 
         # adds those agents to the geo space
         self.space.add_agents(self.cells)
@@ -133,6 +150,7 @@ class EuropeModel(mesa.Model):
         # adds all new cells to the default empire
         # also adds them to the scheduler
         for cell in self.cells:
+            cell.elevation *= 100
             self.default_empire.add_cell(cell)
             self.schedule.add(cell)
             cell.setup_neighbors()
@@ -148,9 +166,6 @@ class EuropeModel(mesa.Model):
         # spaghetti code to fix coastal cells
         for cell in [cell for cell in self.cells if cell.coastal]:
             cell.fix_coastal()
-
-        # removes the elevation layer after cell creation to improve performance
-        self.space.layers.pop()
 
         # sets up the initial empire
 
@@ -170,13 +185,17 @@ class EuropeModel(mesa.Model):
 
         # adds each starting cell to that empire
         for cell in starting_cells:
+            cell.religions.clear()
             self.empires[0].add_cell(cell)
             self.default_empire.remove_cell(cell)
+            cell.update_religion()
+            cell.majReligion = cell.religions[0]
+            cell.majReligion.conversion = 1
 
     # updates the average area of all empires
     def update_avg_area(self):
 
-        # counts only the number of empires with size greater than 10
+        # counts only the number of empires with size greater than 5
         # if this is not done, distribution is skewed as small empires pop up on the border of big ones constantly
         count = 0
 
@@ -205,25 +224,38 @@ class EuropeModel(mesa.Model):
 
         tech_id = len(self.techs_dropped) + 1
         tech_type = random.choice(self.tech_types)
+        tech = None
         match tech_type:
-            case "Asabiya":
-                strength = random.randint(1, 20) / 100
+            case "Asabiya Growth":
+                strength = random.random() * 20
                 tech = AsabiyaTechnology(cell_choice, strength, "Growth", tech_id)
 
+            case "Asabiya Decay":
+                strength = random.random() * 20
+                tech = AsabiyaTechnology(cell_choice, strength, "Decay", tech_id)
+
             case "Power Decline":
-                strength = random.randint(1, 7)
+                strength = random.random() * 7
                 tech = PowerDeclineTechnology(cell_choice, strength, tech_id)
 
             case "Delta Power":
-                strength = random.randint(1, 9) / 100
+                strength = random.random() * 3
                 tech = DeltaPowerTechnology(cell_choice, strength, tech_id)
 
             case "Elevation":
-                strength = random.randint(1, 150) / 100
+                strength = random.random() * 150
                 tech = ElevationTechnology(cell_choice, strength, tech_id)
 
         cell_choice.add_technology(tech)
         self.techs_dropped.append(tech)
+
+    def update_avg_difference(self):
+        if len(self.differences) > 0:
+            total = 0
+            for diff in self.differences:
+                total += abs(diff)
+            self.avg_difference = total / len(self.differences)
+        self.differences.clear()
 
     # model actions on each step
     def step(self):
@@ -241,8 +273,7 @@ class EuropeModel(mesa.Model):
                     self.empires.remove(empire)
                     continue
 
-                empire.update_center()
-                empire.update_avg_asabiya()
+                empire.update_properties()
 
             # updates data variables
             self.update_avg_area()
@@ -250,14 +281,11 @@ class EuropeModel(mesa.Model):
             # collects data on each step
             self.datacollector.collect(self)
 
-            if self.tech_frequency != 0 and self.steps > 0 and self.steps % self.tech_frequency == 0:
-                self.tech_drop()
-
             # steps all cells in a random order
             self.schedule.step()
 
             # stops the simulation after the inputted number of steps have occurred
-            if self.steps >= self.sim_length:
+            if not self.batch_run and self.steps >= self.sim_length:
                 self.running = False
 
                 # determines the quartiles for the heatmap
@@ -268,14 +296,3 @@ class EuropeModel(mesa.Model):
                     cell.running = False
                     for perc in percentiles:
                         cell.percentiles.append(perc)
-
-
-# cell to store raster elevation data
-# doesn't ever need to change!
-class ElevationCell(Cell):
-    def __init__(self, pos: mesa.space.Coordinate | None = None, indices: mesa.space.Coordinate | None = None,):
-        super().__init__(pos, indices)
-        self.elevation = None
-
-    def step(self):
-        pass

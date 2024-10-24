@@ -66,19 +66,30 @@ def agent_portrayal(agent):
                      "color": agent.color,
                      "radius": 2,
                      "weight": 1,
-                     "description": (round(agent.x, 2), round(agent.y, 2))
+                     "description": (round(agent.x, 2), round(agent.y, 2)),
+                     "fillOpacity": 0
                      }
 
-        if len(agent.technology) > 0:
-            portrayal["fillOpacity"] = 1
-            if isinstance(agent.technology[0], DeltaPowerTechnology):
+        if agent.majReligion:
+            if agent.majReligion.type == "pros":
                 portrayal["fillColor"] = "Red"
-            elif isinstance(agent.technology[0], AsabiyaTechnology):
+            else:
                 portrayal["fillColor"] = "Green"
-            elif isinstance(agent.technology[0], PowerDeclineTechnology):
-                portrayal["fillColor"] = "Blue"
-            elif isinstance(agent.technology[0], ElevationTechnology):
-                portrayal["fillColor"] = "Orange"
+
+            if agent.majReligion.conversion > 1:
+                portrayal["fillOpacity"] = 1
+            elif agent.majReligion.conversion > 0.8:
+                portrayal["fillOpacity"] = 0.8
+            elif agent.majReligion.conversion > 0.6:
+                portrayal["fillOpacity"] = 0.6
+            elif agent.majReligion.conversion > 0.4:
+                portrayal["fillOpacity"] = 0.4
+            elif agent.majReligion.conversion > 0.2:
+                portrayal["fillOpacity"] = 0.2
+            else:
+                portrayal["fillOpacity"] = 0
+        else:
+            portrayal["fillColor"] = "Red"
 
     else:
         if agent.times_changed_hands == 0:
@@ -162,15 +173,14 @@ area_histogram = BarChartModule([{"Label": "5-50 Hexes", "Color": "#cc2121"},
 grid = mesa_geo.visualization.MapModule(agent_portrayal, [46, 17], 3.75, tiles=xyz.CartoDB.Positron, map_width=900, map_height=600)
 
 # slider for inputting power decline
-power_decline_slider = Slider('Power Decline', value=2, min_value=0.1, max_value=8, step=0.1)
-delta_power_slider = Slider('Delta Power', value=0.1, min_value=0.01, max_value=0.2, step=0.01)
+power_decline_slider = Slider('Power Decline', value=4, min_value=0.1, max_value=8, step=0.1)
+delta_power_slider = Slider('Delta Power', value=0.01, min_value=0.1, max_value=0.2, step=0.01)
 asa_growth_slider = Slider('Asabiya Growth', value=0.2, min_value=0.01, max_value=0.3, step=0.01)
 asa_decay_slider = Slider('Asabiya Decay', value=0.1, min_value=0.01, max_value=0.3, step=0.01)
-elevation_constant_slider = Slider('Elevation Constant', value=4.5, min_value=0, max_value=9, step=0.5)
+elevation_constant_slider = Slider('Elevation Constant', value=6.5, min_value=0, max_value=9, step=0.5)
 
 # number input for setting length of the simulation
 sim_length = NumberInput("Length of Simulation (Steps)", value=200)
-tech_frequency = NumberInput("Frequency of Technology Drops (0 for no drops)", value=50)
 
 # checkbox for whether to show the heatmap at the end
 show_heatmap = Checkbox("Show heatmap at end?", value=False)
@@ -185,7 +195,6 @@ use_elevation = Checkbox("Elevation Modifier?", value=True)
 # can modify with user settable parameters like sliders
 model_params = {
     "sim_length": sim_length,
-    "tech_frequency": tech_frequency,
     "show_heatmap": show_heatmap,
     "show_elevation": show_elevation,
     "show_coastal": show_coastal,
@@ -195,7 +204,8 @@ model_params = {
     "delta_power": delta_power_slider,
     "asa_growth": asa_growth_slider,
     "asa_decay": asa_decay_slider,
-    "agent_reporters": False
+    "agent_reporters": False,
+    "batch_run": False
 }
 
 # creates and launches the server

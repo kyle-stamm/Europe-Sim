@@ -1,4 +1,6 @@
 import random
+from copy import deepcopy
+from religion import *
 
 
 # empire class
@@ -13,6 +15,17 @@ class Empire:
         self.center = (None, None)
         self.id = unique_id
         self.average_asabiya = 0
+        self.average_us = 0
+
+        if self.id != 0:
+            if len(self.model.religions) > 0:
+                self.religion = Religion(self.model.religions[len(self.model.religions) - 1].id + 1)
+            else:
+                self.religion = Religion(1)
+            self.model.religions.append(self.religion)
+        else:
+            self.religion = self.model.default_religion
+        self.attack_chance = self.religion.attack_chance
 
         # gives each empire a random hex code color
         self.color = "#" + str(hex(random.randint(0, 16777216)))[2:]
@@ -20,8 +33,23 @@ class Empire:
     # adds a cell to this empire
     def add_cell(self, cell):
         self.cells.append(cell)
-        cell.empire = self
         cell.times_changed_hands += 1
+        for religion in cell.religions:
+            if religion.id == self.id:
+                break
+        else:
+            cell.religions.append(deepcopy(self.religion))
+            cell.religions[len(cell.religions) - 1].conversion = 0.25 * cell.religions[0].conversion
+            cell.religions[0].conversion *= 0.75
+
+        if cell.ultrasociality > 0 or cell.prev_empire.id == self.id:
+            cell.ultrasociality *= -1
+        else:
+            cell.ultrasociality = 0
+
+        cell.prev_empire = cell.empire
+        cell.empire = self
+        cell.color = self.color
 
     # removes a cell from this empire
     def remove_cell(self, cell):
@@ -45,31 +73,23 @@ class Empire:
             else:
                 self.model.area_histogram[self.size // 50] += 1
 
-    # updates the average asabiya
-    def update_avg_asabiya(self):
-
-        # sums the asabiyas of all cells in the empire
-        total = 0
-        for cell in self.cells:
-            total += cell.asabiya
-
-        # divides by the number of cells in the empire
-        self.average_asabiya = total / len(self.cells)
-
-    # updates the center point of the empire
-    def update_center(self):
-
+    def update_properties(self):
         # sums the x and y coordinates of all cells in the empire
         x_total = 0
         y_total = 0
+        asa_total = 0
+        us_total = 0
         for cell in self.cells:
             x_total += cell.x
             y_total += cell.y
+            asa_total += cell.asabiya
+            us_total += cell.ultrasociality
 
-        # divides those totals by the number of cells
+        self.average_asabiya = asa_total / len(self.cells)
         self.center = round(x_total / len(self.cells)), round(y_total / len(self.cells))
+        self.average_us = us_total / len(self.cells)
 
     # compiled update function
     def update(self):
-        self.update_avg_asabiya()
-        self.update_center()
+        self.update_properties()
+        self.update_size()
